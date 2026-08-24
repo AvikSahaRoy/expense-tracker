@@ -512,6 +512,11 @@
     <span class="mid"><span class="t1">Passcode</span><span class="t2" id="sPassSub"></span></span>
     <span class="go" data-icon="right"></span>
   </button>
+  <button class="srow" id="sStay">
+    <span class="ic" data-icon="calendar"></span>
+    <span class="mid"><span class="t1">Ask for the passcode</span><span class="t2" id="sStaySub"></span></span>
+    <span class="go" data-icon="right"></span>
+  </button>
   <button class="srow" id="sLock">
     <span class="ic" data-icon="lock"></span>
     <span class="mid"><span class="t1">Lock now</span><span class="t2">Ask for the passcode again</span></span>
@@ -567,6 +572,11 @@
   <p class="note">Wrong guesses are counted by the script: after 15 in ten minutes it
      stops answering. Run <b>resetPasscodeAttempts</b> in the editor if that ever catches
      you out.</p>
+  <p class="note"><b>Ask for the passcode</b> sets how often this device asks. While it is
+     remembered, the passcode is kept wrapped by a key this browser will use but never
+     reveal — so nothing can read it back as text. It does mean anyone holding this
+     unlocked phone can open Ledger without typing it. <b>Lock now</b> ends that
+     immediately, and so does clearing the site's data.</p>
   <button class="done" id="pClose">Close</button>
 </div>
 
@@ -653,6 +663,7 @@
   // payload. The three legacy.* keys are the old plaintext layout, read once and erased.
   var K = {
     lock: 'ledger.lock', vault: 'ledger.vault', dsalt: 'ledger.dsalt',
+    stay: 'ledger.stay', session: 'ledger.session',
     legacy: { entries: 'ledger.entries', outbox: 'ledger.outbox', cfg: 'ledger.cfg' }
   };
   var PERIODS = [
@@ -787,6 +798,89 @@
     $('lockPass').type = on ? 'text' : 'password';
     $('lockReveal').textContent = on ? 'Hide passcode' : 'Show passcode';
   }
+  // ── Remembered unlock ────────────────────────────────────────────
+  // Remembering means the passcode has to survive a restart somewhere on disk. Rather
+  // than sit in localStorage as text, it is wrapped with a key the browser will happily
+  // use but never hand back (IndexedDB CryptoKey, extractable: false) — so no script and
+  // no storage inspector can read the passcode itself out of this device.
+  var IDB_NAME = 'ledger-keys', IDB_STORE = 'k', REMEMBER_DEFAULT_DAYS = 30;
+
+  function idb() {
+    return new Promise(function (res, rej) {
+      if (!window.indexedDB) return rej(new Error('no indexeddb'));
+      var rq = indexedDB.open(IDB_NAME, 1);
+      rq.onupgradeneeded = function () { rq.result.createObjectStore(IDB_STORE); };
+      rq.onsuccess = function () { res(rq.result); };
+      rq.onerror = function () { rej(rq.error); };
+    });
+  }
+  function idbGet(k) {
+    return idb().then(function (db) {
+      return new Promise(function (res, rej) {
+        var rq = db.transaction(IDB_STORE, 'readonly').objectStore(IDB_STORE).get(k);
+        rq.onsuccess = function () { res(rq.result || null); };
+        rq.onerror = function () { rej(rq.error); };
+      });
+    });
+  }
+  function idbPut(k, v) {
+    return idb().then(function (db) {
+      return new Promise(function (res, rej) {
+        var tx = db.transaction(IDB_STORE, 'readwrite');
+        tx.objectStore(IDB_STORE).put(v, k);
+        tx.oncomplete = function () { res(true); };
+        tx.onerror = function () { rej(tx.error); };
+      });
+    });
+  }
+  function deviceKey() {
+    return idbGet('deviceKey').then(function (key) {
+      if (key) return key;
+      return SUB.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'])
+        .then(function (k) { return idbPut('deviceKey', k).then(function () { return k; }); });
+    });
+  }
+  function rememberDays() {
+    var v = localStorage.getItem(K.stay);
+    return v === null ? REMEMBER_DEFAULT_DAYS : (Number(v) || 0);
+  }
+  function setRememberDays(n) {
+    try { localStorage.setItem(K.stay, String(n)); } catch (e) {}
+    if (!n) forgetUnlock(); else if (vault.pass) rememberUnlock(vault.pass);
+  }
+  function rememberUnlock(pass) {
+    var days = rememberDays();
+    if (!days || !SUB) return Promise.resolve();
+    return deviceKey().then(function (dk) {
+      var iv = randBytes(12);
+      return SUB.encrypt({ name: 'AES-GCM', iv: iv }, dk, new TextEncoder().encode(pass))
+        .then(function (ct) {
+          localStorage.setItem(K.session, JSON.stringify({
+            exp: Date.now() + days * 864e5, iv: b64(iv), ct: b64(ct)
+          }));
+        });
+    }).catch(function () {});   // remembering is a convenience — never let it block a login
+  }
+  function forgetUnlock() {
+    try { localStorage.removeItem(K.session); } catch (e) {}
+  }
+  function rememberedPass() {
+    var s = readJSON(K.session);
+    if (!s || !s.ct || !(Number(s.exp) > Date.now())) { forgetUnlock(); return Promise.resolve(null); }
+    return deviceKey()
+      .then(function (dk) {
+        return SUB.decrypt({ name: 'AES-GCM', iv: unb64(s.iv) }, dk, unb64(s.ct));
+      })
+      .then(function (pt) { return new TextDecoder().decode(pt); })
+      .catch(function () { forgetUnlock(); return null; });
+  }
+  function rememberLabel() {
+    var d = rememberDays();
+    return !d ? 'Every time the app opens'
+      : d === 1 ? 'Once a day'
+      : 'Once every ' + d + ' days';
+  }
+
   function showLock(mode) {
     lockMode = mode;
     document.body.classList.add('locked');
@@ -867,6 +961,7 @@
   }
   function lockNow() {
     closeSheets();
+    forgetUnlock();          // an explicit lock must really ask again
     vault.key = null; vault.pass = ''; vault.ready = false;
     entries = []; outbox = []; cfg = { url: '', secret: '', budget: 0 };
     amount = ''; pendingDelete = null; editing = null;
@@ -932,6 +1027,7 @@
             dropLegacy();
             try { localStorage.removeItem(K.lock); } catch (e) {}
             save();
+            rememberUnlock(pass);
             startApp();
             toast('Unlocked · ' + entries.length +
                   (entries.length === 1 ? ' expense' : ' expenses') + ' from your Sheet');
@@ -965,6 +1061,7 @@
       return decryptVault(d.key, box).then(function (data) {
         vault.key = d.key; vault.salt = salt; vault.pass = pass; vault.ready = true;
         adopt(data);
+        rememberUnlock(pass);
         $('lockGo').disabled = false;
         startApp();
       });
@@ -997,6 +1094,7 @@
       adopt(legacyData());
       dropLegacy();
       save();
+      rememberUnlock(pass);
       startApp();
       toast('Local only · connect a Sheet later from Settings');
     }).catch(function () { lockError('Could not set up on this device.'); });
@@ -1021,7 +1119,15 @@
     // Only an encrypted store can verify a passcode offline. Data left by an older
     // build has no passcode attached to it, so that device goes through the Sheet
     // once — the "Set up without a Sheet" link is the offline way out.
-    showLock(readJSON(K.vault) ? 'unlock' : 'first');
+    var hasVault = !!readJSON(K.vault);
+    showLock(hasVault ? 'unlock' : 'first');
+    if (!hasVault) return;
+    rememberedPass().then(function (pass) {
+      if (!pass || lockMode !== 'unlock') return;
+      $('lockNote').textContent = 'Unlocking…';
+      $('lockPass').value = pass;
+      handleLockGo();
+    });
   }
 
   // ── Helpers ──────────────────────────────────────────────────────
@@ -1794,6 +1900,7 @@
     $('sPassSub').textContent = vault.plain
       ? 'Off — data is stored in plain text'
       : (cfg.url && cfg.secret) ? 'Checked by your Sheet' : 'Local to this device';
+    $('sStaySub').textContent = rememberLabel();
   }
   function paintAll() {
     V = summarise();
@@ -1939,6 +2046,14 @@
   $('sSheet').addEventListener('click', function () { closeSheets(); openCfg(); });
   $('sQueue').addEventListener('click', function () { closeSheets(); paintQueue(); openSheet('queueSheet'); });
   $('sPass').addEventListener('click', function () { closeSheets(); openSheet('passSheet'); });
+  $('sStay').addEventListener('click', function () {
+    var steps = [30, 7, 1, 0];          // days between prompts, then "every launch"
+    var i = steps.indexOf(rememberDays());
+    setRememberDays(steps[(i + 1) % steps.length]);
+    buzz(8);
+    paintSettings();
+    toast('Passcode asked: ' + rememberLabel().toLowerCase());
+  });
   $('sLock').addEventListener('click', lockNow);
   $('budSave').addEventListener('click', saveBudget);
   $('queueRetry').addEventListener('click', function () {
@@ -1986,7 +2101,10 @@
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) { hiddenAt = Date.now(); return; }
     if (!vault.ready) return;
-    if (!vault.plain && hiddenAt && Date.now() - hiddenAt > AUTOLOCK_MS) { lockNow(); return; }
+    // Only auto-lock when the passcode is asked for every launch anyway — otherwise
+    // it would undo the whole point of remembering it.
+    if (!vault.plain && !rememberDays() && hiddenAt &&
+        Date.now() - hiddenAt > AUTOLOCK_MS) { lockNow(); return; }
     paintAll(); sync(true);
   });
 
