@@ -1,10 +1,14 @@
 {
+  "id": "ledger-expense-tracker",
   "name": "Ledger — Expense Tracker",
   "short_name": "Ledger",
-  "description": "Track daily spending in rupees. Works offline and syncs to your Google Sheet.",
+  "description": "Track daily spending in rupees. Passcode locked, works offline, syncs to your Google Sheet.",
+  "lang": "en-IN",
+  "dir": "ltr",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "orientation": "portrait",
   "background_color": "#F4F3F8",
   "theme_color": "#4C3FBF",
@@ -13,5 +17,25 @@
     { "src": "./icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "./icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
     { "src": "./icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Add an expense",
+      "short_name": "Add",
+      "url": "./?tab=add",
+      "icons": [{ "src": "./icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "History",
+      "short_name": "History",
+      "url": "./?tab=history",
+      "icons": [{ "src": "./icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Insights",
+      "short_name": "Insights",
+      "url": "./?tab=charts",
+      "icons": [{ "src": "./icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
   ]
 }

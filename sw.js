@@ -1,6 +1,6 @@
 /* Ledger service worker — makes the app open and run with no connection. */
 
-const VERSION = 'ledger-v1';
+const VERSION = 'ledger-v3';
 const SHELL = [
   './',
   './index.html',
@@ -12,7 +12,8 @@ const SHELL = [
 self.addEventListener('install', function (e) {
   e.waitUntil(
     caches.open(VERSION)
-      .then(function (c) { return c.addAll(SHELL); })
+      // reload bypasses the HTTP cache, so a fresh install really gets fresh files
+      .then(function (c) { return c.addAll(SHELL.map(function (u) { return new Request(u, { cache: 'reload' }); })); })
       .then(function () { return self.skipWaiting(); })
   );
 });
@@ -29,6 +30,11 @@ self.addEventListener('activate', function (e) {
   );
 });
 
+function putIn(cache, req, res) {
+  if (res && (res.ok || res.type === 'opaque')) cache.put(req, res.clone());
+  return res;
+}
+
 self.addEventListener('fetch', function (e) {
   const req = e.request;
   if (req.method !== 'GET') return;
@@ -44,10 +50,9 @@ self.addEventListener('fetch', function (e) {
     e.respondWith(
       caches.open(VERSION).then(function (cache) {
         return cache.match(req).then(function (hit) {
-          const net = fetch(req).then(function (res) {
-            if (res && (res.ok || res.type === 'opaque')) cache.put(req, res.clone());
-            return res;
-          }).catch(function () { return hit; });
+          const net = fetch(req)
+            .then(function (res) { return putIn(cache, req, res); })
+            .catch(function () { return hit; });
           return hit || net;
         });
       })
@@ -55,22 +60,36 @@ self.addEventListener('fetch', function (e) {
     return;
   }
 
-  // App shell: cache first, so a cold launch offline still opens instantly.
-  if (url.origin === self.location.origin) {
+  if (url.origin !== self.location.origin) return;
+
+  // The page and the manifest go to the network first. Cache-first on the HTML meant a
+  // phone that had already installed the app kept serving an old build forever, since a
+  // hand-rolled cache never revalidates. Offline still falls back to the cached copy.
+  const isDoc = req.mode === 'navigate' || req.destination === 'document' ||
+                url.pathname === '/' || /\.(html|webmanifest)$/.test(url.pathname);
+  if (isDoc) {
     e.respondWith(
-      caches.match(req).then(function (hit) {
-        return hit || fetch(req).then(function (res) {
-          if (res && res.ok) {
-            const copy = res.clone();
-            caches.open(VERSION).then(function (c) { c.put(req, copy); });
-          }
-          return res;
-        }).catch(function () {
-          return caches.match('./index.html');
-        });
+      caches.open(VERSION).then(function (cache) {
+        return fetch(req)
+          .then(function (res) { return putIn(cache, req, res); })
+          .catch(function () {
+            return cache.match(req).then(function (hit) {
+              return hit || cache.match('./index.html');
+            });
+          });
       })
     );
+    return;
   }
+
+  // Icons and other static bits: cache first, they change name when they change.
+  e.respondWith(
+    caches.open(VERSION).then(function (cache) {
+      return cache.match(req).then(function (hit) {
+        return hit || fetch(req).then(function (res) { return putIn(cache, req, res); });
+      });
+    })
+  );
 });
 
 // Fired by the page when a sync is wanted after reconnecting.

@@ -5,6 +5,9 @@
 <title>Ledger — Expense Tracker</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#4C3FBF">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Ledger">
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" href="./icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -36,19 +39,51 @@
   button:focus-visible, input:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
   .tnum { font-variant-numeric: tabular-nums; }
   .hidden { display: none !important; }
+  /* Icons scale with the font-size of whatever holds them */
+  svg.i { width: 1em; height: 1em; display: block; flex: none; }
   .app { max-width: 480px; margin: 0 auto; padding: 12px 16px 108px; }
+  body.locked .app, body.locked .tabbar { display: none; }
+
+  /* Lock screen */
+  .lockwrap { position: fixed; inset: 0; z-index: 60; background: var(--bg);
+              display: grid; place-items: center; padding: 24px 20px; }
+  .lockcard { width: 100%; max-width: 340px; text-align: center; }
+  .lockcard .logo { width: 58px; height: 58px; margin: 0 auto 16px; border-radius: 18px;
+                    background: var(--soft); color: var(--brand); font-size: 26px;
+                    display: grid; place-items: center; }
+  .lockcard h1 { font-size: 21px; font-weight: 600; margin: 0 0 4px; letter-spacing: -.01em; }
+  .lockcard .note { font-size: 13px; color: var(--muted); margin: 0 0 18px; line-height: 1.6; }
+  .lockcard input { width: 100%; margin-bottom: 9px; background: var(--surface);
+                    border: 1px solid var(--line); border-radius: 13px; padding: 14px 15px;
+                    font-size: 17px; letter-spacing: .1em; text-align: center;
+                    color: var(--ink); font-family: inherit; }
+  .lockcard input.plain { font-size: 13.5px; letter-spacing: normal; text-align: left; }
+  .lockcard .rrow { display: flex; justify-content: flex-end; margin: -2px 2px 4px; }
+  .lockcard .reveal { font-size: 11.5px; font-weight: 600; color: var(--muted); padding: 4px 2px; }
+  .lockcard .err { font-size: 12.5px; font-weight: 500; color: var(--danger);
+                   margin: 2px 0 10px; line-height: 1.5; }
+  .lockcard .primary { width: 100%; margin-top: 7px; padding: 15px 0; border-radius: 14px;
+                       background: var(--brand); color: #fff; font-size: 15px; font-weight: 600; }
+  .lockcard .ghost { width: 100%; margin-top: 12px; font-size: 12.5px;
+                     font-weight: 500; color: var(--muted); }
 
   /* Sync status */
+  .toprow { display: flex; gap: 8px; margin-bottom: 10px; }
   .status {
-    display: flex; align-items: center; gap: 7px; width: 100%;
+    display: flex; align-items: center; gap: 7px; flex: 1; min-width: 0;
     font-size: 12px; font-weight: 500; color: var(--muted);
-    padding: 7px 12px; margin-bottom: 10px; border-radius: 999px;
+    padding: 7px 12px; border-radius: 999px;
     background: var(--surface); box-shadow: var(--shadow);
   }
   .status .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--teal); flex: none; }
   .status.wait .dot { background: var(--amber); }
   .status.off .dot { background: var(--muted); }
-  .status .act { margin-left: auto; color: var(--brand); font-weight: 600; }
+  .status.err .dot { background: var(--danger); }
+  .status #statusText { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .status .act { margin-left: auto; color: var(--brand); font-weight: 600; flex: none; }
+  .gear { width: 36px; flex: none; border-radius: 999px; background: var(--surface);
+          color: var(--muted); font-size: 17px; display: grid; place-items: center;
+          box-shadow: var(--shadow); }
 
   /* Summary */
   .hero { background: var(--surface); border-radius: 20px; padding: 18px 18px 16px;
@@ -63,10 +98,22 @@
   .stat strong { font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
   .hero.compact { padding: 13px 16px; margin-bottom: 12px; display: flex;
                   align-items: baseline; justify-content: space-between; gap: 10px; }
-  .hero.compact .datestamp, .hero.compact .stats { display: none; }
+  .hero.compact .datestamp, .hero.compact .stats, .hero.compact .budget { display: none; }
   .hero.compact .kicker { margin: 0; font-size: 13px; }
   .hero.compact .big { font-size: 23px; }
   .hero.compact .big .rs { font-size: 17px; }
+
+  /* Budget */
+  .budget { display: block; width: 100%; text-align: left; margin-top: 15px; }
+  .bhead { display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+           font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .bhead #bLabel { font-weight: 600; color: var(--ink); }
+  .budget.off .bhead #bLabel { font-weight: 500; color: var(--brand); }
+  .btrack { height: 7px; border-radius: 5px; background: var(--bg); overflow: hidden; }
+  .budget.off .btrack { display: none; }
+  .bfill { height: 7px; border-radius: 5px; background: var(--teal); transition: width .3s; }
+  .bfill.warn { background: var(--amber); }
+  .bfill.over { background: var(--danger); }
 
   /* Amount */
   .entry { text-align: center; padding: 2px 0 0; }
@@ -82,7 +129,9 @@
   .cat { background: var(--surface); border: 1.5px solid transparent; border-radius: 13px;
          padding: 9px 2px 7px; text-align: center; box-shadow: var(--shadow);
          transition: border-color .12s, background .12s; }
-  .cat .ic { font-size: 17px; line-height: 1.2; display: block; }
+  .cat .ic { font-size: 19px; line-height: 1.2; display: block; color: var(--muted); }
+  .cat .ic svg { margin: 0 auto; }
+  .cat[aria-pressed="true"] .ic { color: var(--brand); }
   .cat .nm { font-size: 10.5px; font-weight: 500; color: var(--muted); margin-top: 2px;
              display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cat[aria-pressed="true"] { border-color: var(--brand); background: var(--soft); }
@@ -93,7 +142,10 @@
   .dpick { flex: 1; background: var(--surface); border: 1.5px solid transparent;
            border-radius: 12px; padding: 10px 6px; font-size: 13px; font-weight: 500;
            color: var(--muted); box-shadow: var(--shadow); white-space: nowrap;
-           overflow: hidden; text-overflow: ellipsis; }
+           overflow: hidden; display: flex; align-items: center;
+           justify-content: center; gap: 5px; }
+  .dpick .lb { overflow: hidden; text-overflow: ellipsis; }
+  .dpick svg { font-size: 15px; }
   .dpick[aria-pressed="true"] { border-color: var(--brand); background: var(--soft);
                                 color: var(--brand); font-weight: 600; }
   #note { width: 100%; margin-top: 8px; background: var(--surface); border: none;
@@ -107,11 +159,36 @@
          font-weight: 500; box-shadow: var(--shadow); transition: transform .08s, background .08s; }
   .key:active { background: var(--soft); transform: scale(.96); }
   .key.sm { font-size: 18px; }
+  .key svg { margin: 0 auto; }
   .save { width: 100%; margin-top: 12px; padding: 16px 0; border-radius: 15px;
           background: var(--brand); color: #fff; font-size: 15.5px; font-weight: 600;
           letter-spacing: -.01em; transition: opacity .15s, transform .08s; }
   .save:disabled { opacity: .35; }
   .save:active:not(:disabled) { transform: scale(.985); }
+
+  /* Filters */
+  .filters { margin-bottom: 14px; }
+  #search { width: 100%; background: var(--surface); border: none; border-radius: 12px;
+            padding: 11px 14px; font-size: 14px; color: var(--ink);
+            box-shadow: var(--shadow); font-family: inherit; }
+  #search::placeholder { color: var(--muted); }
+  .seg { display: flex; gap: 5px; margin-top: 8px; }
+  .seg button { flex: 1; background: var(--surface); border: 1.5px solid transparent;
+                border-radius: 11px; padding: 8px 4px; font-size: 12.5px; font-weight: 500;
+                color: var(--muted); box-shadow: var(--shadow); white-space: nowrap; }
+  .chips { display: flex; gap: 5px; margin-top: 8px; overflow-x: auto;
+           padding-bottom: 3px; scrollbar-width: none; }
+  .chips::-webkit-scrollbar { display: none; }
+  .chips button { flex: none; background: var(--surface); border: 1.5px solid transparent;
+                  border-radius: 999px; padding: 6px 11px; font-size: 12.5px; font-weight: 500;
+                  color: var(--muted); box-shadow: var(--shadow); white-space: nowrap;
+                  display: inline-flex; align-items: center; gap: 5px; }
+  .chips button svg { font-size: 14px; }
+  .seg button[aria-pressed="true"], .chips button[aria-pressed="true"] {
+    border-color: var(--brand); background: var(--soft); color: var(--brand); font-weight: 600; }
+  .fmeta { display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+           font-size: 12px; color: var(--muted); margin: 10px 4px 0; }
+  .fmeta button { font-size: 12px; font-weight: 600; color: var(--brand); }
 
   /* History */
   .daygroup { margin-bottom: 16px; }
@@ -119,17 +196,20 @@
              padding: 0 4px 7px; font-size: 12.5px; font-weight: 600; color: var(--muted); }
   .dayhead .sum { color: var(--ink); }
   .items { background: var(--surface); border-radius: 16px; box-shadow: var(--shadow); overflow: hidden; }
-  .item { display: flex; align-items: center; gap: 11px; padding: 12px 14px; }
+  .item { display: flex; align-items: center; gap: 11px; padding: 0 14px 0 0; }
   .item + .item { border-top: 1px solid var(--line); }
+  .item .open { display: flex; align-items: center; gap: 11px; flex: 1; min-width: 0;
+                padding: 12px 0 12px 14px; text-align: left; }
+  .item .open:active { background: var(--soft); }
   .item .ic { width: 36px; height: 36px; flex: none; border-radius: 11px; background: var(--soft);
-              display: grid; place-items: center; font-size: 16px; }
+              display: grid; place-items: center; font-size: 18px; color: var(--brand); }
   .item .mid { flex: 1; min-width: 0; }
-  .item .t1 { font-size: 14.5px; font-weight: 500; }
-  .item .t2 { font-size: 12px; color: var(--muted); overflow: hidden;
+  .item .t1 { display: block; font-size: 14.5px; font-weight: 500; }
+  .item .t2 { display: block; font-size: 12px; color: var(--muted); overflow: hidden;
               text-overflow: ellipsis; white-space: nowrap; }
   .item .amt { font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
   .item .del { width: 28px; height: 28px; flex: none; border-radius: 8px; color: var(--muted);
-               font-size: 17px; line-height: 1; display: grid; place-items: center; }
+               font-size: 16px; line-height: 1; display: grid; place-items: center; }
   .item .del:active { background: var(--soft); color: var(--danger); }
   .pill { font-size: 10px; font-weight: 600; color: var(--amber); border: 1px solid var(--amber);
           border-radius: 5px; padding: 0 4px; margin-left: 6px; vertical-align: 1px; }
@@ -139,6 +219,13 @@
           box-shadow: var(--shadow); margin-bottom: 14px; }
   .card h3 { font-size: 14.5px; font-weight: 600; margin: 0 0 2px; }
   .card .sub { font-size: 12.5px; color: var(--muted); margin: 0 0 14px; }
+  .mnav { display: flex; align-items: center; justify-content: space-between;
+          gap: 8px; margin-bottom: 12px; }
+  .mnav .ttl { font-size: 14px; font-weight: 600; }
+  .mnav button { width: 34px; height: 34px; border-radius: 11px; background: var(--surface);
+                 color: var(--muted); font-size: 17px; display: grid; place-items: center;
+                 box-shadow: var(--shadow); }
+  .mnav button:disabled { opacity: .3; }
   .bars { display: flex; align-items: flex-end; gap: 2px; height: 108px; }
   .bars .b { flex: 1; border-radius: 3px 3px 0 0; background: var(--brand-2); opacity: .55; min-height: 2px; }
   .bars .b.on { opacity: 1; background: var(--brand); }
@@ -147,7 +234,8 @@
           font-size: 11px; color: var(--muted); }
   .catrow { margin-bottom: 13px; }
   .catrow:last-child { margin-bottom: 0; }
-  .catrow .top { display: flex; align-items: baseline; gap: 7px; font-size: 13.5px; margin-bottom: 5px; }
+  .catrow .top { display: flex; align-items: center; gap: 7px; font-size: 13.5px; margin-bottom: 5px; }
+  .catrow .ci { color: var(--brand); font-size: 16px; display: flex; }
   .catrow .nm { font-weight: 500; }
   .catrow .pc { font-size: 12px; color: var(--muted); }
   .catrow .am { margin-left: auto; font-weight: 600; }
@@ -162,9 +250,10 @@
             border-top: 1px solid var(--line); display: flex; padding-bottom: env(safe-area-inset-bottom); }
   .tab { flex: 1; padding: 11px 0 12px; font-size: 11.5px; font-weight: 500;
          color: var(--muted); text-align: center; }
-  .tab .ti { display: block; font-size: 18px; line-height: 1.3; filter: grayscale(1); opacity: .55; }
+  .tab .ti { display: block; font-size: 21px; line-height: 1.25; opacity: .6; margin-bottom: 1px; }
+  .tab .ti svg { margin: 0 auto; }
   .tab[aria-selected="true"] { color: var(--brand); font-weight: 600; }
-  .tab[aria-selected="true"] .ti { filter: none; opacity: 1; }
+  .tab[aria-selected="true"] .ti { opacity: 1; }
 
   /* Sheets */
   .backdrop { position: fixed; inset: 0; background: rgba(20, 17, 34, .45); z-index: 20;
@@ -172,13 +261,15 @@
   .backdrop.on { opacity: 1; pointer-events: auto; }
   .sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 21; background: var(--surface);
            border-radius: 22px 22px 0 0; padding: 8px 18px 26px; max-width: 480px; margin: 0 auto;
+           max-height: 88vh; overflow-y: auto; -webkit-overflow-scrolling: touch;
            transform: translateY(102%); transition: transform .26s cubic-bezier(.32, .72, 0, 1); }
   .sheet.on { transform: translateY(0); }
   .grip { width: 38px; height: 4px; border-radius: 3px; background: var(--line); margin: 0 auto 14px; }
   .calhead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
   .calhead .ttl { font-size: 15.5px; font-weight: 600; }
   .calhead button { width: 34px; height: 34px; border-radius: 10px; background: var(--bg);
-                    font-size: 17px; line-height: 1; color: var(--muted); }
+                    font-size: 17px; line-height: 1; color: var(--muted);
+                    display: grid; place-items: center; }
   .calhead button:disabled { opacity: .3; }
   .dow, .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
   .dow span { text-align: center; font-size: 11px; font-weight: 600; color: var(--muted); padding-bottom: 5px; }
@@ -199,24 +290,86 @@
                  color: var(--ink); font-family: inherit; }
   .sheet .primary { width: 100%; margin-top: 16px; padding: 14px 0; border-radius: 14px;
                     background: var(--brand); color: #fff; font-size: 14.5px; font-weight: 600; }
+  .sheet .danger { width: 100%; margin-top: 16px; padding: 14px 0; border-radius: 14px;
+                   background: var(--danger); color: #fff; font-size: 14.5px; font-weight: 600;
+                   transition: transform .08s; }
+  .sheet .danger:active { transform: scale(.985); }
+  .sheet .err { font-size: 12.5px; font-weight: 500; color: var(--danger); margin-top: 10px; }
+  .delcard { display: flex; align-items: center; gap: 12px; background: var(--bg);
+             border-radius: 14px; padding: 13px 14px; margin-top: 4px; }
+  .delcard .ic { width: 40px; height: 40px; flex: none; border-radius: 12px; background: var(--soft);
+                 display: grid; place-items: center; font-size: 20px; color: var(--brand); }
+  .delcard .mid { flex: 1; min-width: 0; }
+  .delcard .t1 { font-size: 14.5px; font-weight: 600; }
+  .delcard .t2 { font-size: 12px; color: var(--muted); overflow: hidden;
+                 text-overflow: ellipsis; white-space: nowrap; }
+  .delcard .amt { font-size: 17px; font-weight: 600; letter-spacing: -.01em; }
+
+  /* Settings rows */
+  .srow { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+          padding: 13px 2px; border-top: 1px solid var(--line); }
+  .srow:first-of-type { border-top: none; }
+  .srow .ic { width: 34px; height: 34px; flex: none; border-radius: 11px; background: var(--soft);
+              color: var(--brand); font-size: 17px; display: grid; place-items: center; }
+  .srow .mid { flex: 1; min-width: 0; }
+  .srow .t1 { display: block; font-size: 14px; font-weight: 500; }
+  .srow .t2 { display: block; font-size: 12px; color: var(--muted); overflow: hidden;
+              text-overflow: ellipsis; white-space: nowrap; }
+  .srow .go { color: var(--muted); font-size: 16px; display: flex; }
+  .srow.warn .ic { color: var(--danger); }
+
+  /* Sync queue */
+  .qrow { display: flex; align-items: center; gap: 11px; padding: 11px 2px;
+          border-top: 1px solid var(--line); }
+  .qrow .mid { flex: 1; min-width: 0; }
+  .qrow .t1 { font-size: 13.5px; font-weight: 500; }
+  .qrow .t2 { font-size: 11.5px; color: var(--muted); line-height: 1.45; }
+  .qrow .t2.bad { color: var(--danger); }
+  .qrow .drop { flex: none; font-size: 12px; font-weight: 600; color: var(--danger);
+                padding: 6px 9px; border-radius: 9px; background: var(--bg); }
 
   #toast { position: fixed; left: 16px; right: 16px; bottom: 76px; z-index: 40; max-width: 448px;
            margin: 0 auto; background: var(--ink); color: var(--bg); padding: 13px 16px;
-           border-radius: 13px; font-size: 13.5px; font-weight: 500;
+           border-radius: 13px; font-size: 13.5px; font-weight: 500; display: flex;
+           align-items: center; gap: 12px;
            box-shadow: 0 6px 20px rgba(0, 0, 0, .18); animation: rise .22s ease-out; }
   #toast.bad { background: var(--danger); color: #fff; }
+  #toast .act { margin-left: auto; flex: none; font-weight: 700;
+                text-decoration: underline; color: inherit; }
   @keyframes rise { from { opacity: 0; transform: translateY(10px); } }
   @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 </style>
 </head>
-<body>
+<body class="locked">
+
+<div class="lockwrap" id="lock">
+  <div class="lockcard">
+    <div class="logo" data-icon="lock"></div>
+    <h1 id="lockTitle">Ledger</h1>
+    <p class="note" id="lockNote">Enter your passcode to unlock.</p>
+    <input id="lockUrl" type="url" class="plain hidden" placeholder="Web app URL (ends in /exec)"
+           autocomplete="off">
+    <input id="lockSecret" type="text" class="plain hidden" placeholder="Secret from the script"
+           autocomplete="off">
+    <input id="lockPass" type="password" placeholder="Passcode"
+           autocomplete="current-password" maxlength="64">
+    <div class="rrow"><button class="reveal" id="lockReveal">Show passcode</button></div>
+    <div class="err hidden" id="lockErr"></div>
+    <button class="primary" id="lockGo">Unlock</button>
+    <button class="ghost hidden" id="lockAlt"></button>
+    <button class="ghost hidden" id="lockSkip">Continue without a passcode</button>
+  </div>
+</div>
 
 <div class="app">
 
-  <button class="status" id="status">
-    <span class="dot"></span><span id="statusText">Starting up…</span>
-    <span class="act" id="statusAct"></span>
-  </button>
+  <div class="toprow">
+    <button class="status" id="status">
+      <span class="dot"></span><span id="statusText">Starting up…</span>
+      <span class="act" id="statusAct"></span>
+    </button>
+    <button class="gear" id="gear" data-icon="settings" aria-label="Settings"></button>
+  </div>
 
   <div class="hero" id="hero">
     <div class="datestamp" id="datestamp">&nbsp;</div>
@@ -227,6 +380,11 @@
       <div class="stat"><span>Daily average</span><strong class="tnum" id="sAvg">₹0</strong></div>
       <div class="stat"><span>Expenses</span><strong class="tnum" id="sCount">0</strong></div>
     </div>
+    <button class="budget off" id="budget">
+      <div class="bhead"><span id="bLabel">Set a monthly budget</span>
+        <span class="tnum" id="bRight"></span></div>
+      <div class="btrack"><div class="bfill" id="bFill"></div></div>
+    </button>
   </div>
 
   <section id="v-add">
@@ -240,7 +398,7 @@
     <div class="daterow">
       <button class="dpick" id="dToday">Today</button>
       <button class="dpick" id="dYest">Yesterday</button>
-      <button class="dpick" id="dPick">📅 Pick date</button>
+      <button class="dpick" id="dPick"></button>
     </div>
     <input id="note" type="text" placeholder="Add a note (optional)" maxlength="200" autocomplete="off">
     <div class="pad">
@@ -250,41 +408,145 @@
       <button class="key" data-k="7">7</button><button class="key" data-k="8">8</button>
       <button class="key" data-k="9">9</button><button class="key sm" data-k=".">.</button>
       <button class="key" data-k="0">0</button>
-      <button class="key sm" data-k="del" aria-label="Delete last digit">⌫</button>
+      <button class="key sm" data-k="del" data-icon="backspace" aria-label="Delete last digit"></button>
     </div>
     <button class="save" id="saveBtn" disabled>Enter an amount</button>
   </section>
 
-  <section id="v-history" class="hidden"><div id="list"></div></section>
-  <section id="v-charts" class="hidden"><div id="charts"></div></section>
+  <section id="v-history" class="hidden">
+    <div class="filters">
+      <input id="search" type="search" placeholder="Search notes or category" maxlength="60" autocomplete="off">
+      <div class="seg" id="periodSeg"></div>
+      <div class="chips" id="catChips"></div>
+      <div class="fmeta">
+        <span id="fCount"></span>
+        <button id="fClear" class="hidden">Clear filters</button>
+      </div>
+    </div>
+    <div id="list"></div>
+  </section>
+  <section id="v-charts" class="hidden">
+    <div class="mnav">
+      <button id="mPrev" data-icon="left" aria-label="Previous month"></button>
+      <div class="ttl" id="mTitle"></div>
+      <button id="mNext" data-icon="right" aria-label="Next month"></button>
+    </div>
+    <div id="charts"></div>
+  </section>
 </div>
 
 <nav class="tabbar">
-  <button class="tab" id="t-add" aria-selected="true"><span class="ti">➕</span>Add</button>
-  <button class="tab" id="t-history" aria-selected="false"><span class="ti">📋</span>History</button>
-  <button class="tab" id="t-charts" aria-selected="false"><span class="ti">📊</span>Insights</button>
+  <button class="tab" id="t-add" aria-selected="true"><span class="ti" data-icon="plus"></span>Add</button>
+  <button class="tab" id="t-history" aria-selected="false"><span class="ti" data-icon="list"></span>History</button>
+  <button class="tab" id="t-charts" aria-selected="false"><span class="ti" data-icon="chart"></span>Insights</button>
 </nav>
 
 <div class="backdrop" id="backdrop"></div>
 
-<div class="sheet" id="calSheet">
+<div class="sheet" id="calSheet" role="dialog" aria-modal="true" aria-labelledby="calTitle">
   <div class="grip"></div>
   <div class="calhead">
-    <button id="calPrev" aria-label="Previous month">‹</button>
+    <button id="calPrev" data-icon="left" aria-label="Previous month"></button>
     <div class="ttl" id="calTitle"></div>
-    <button id="calNext" aria-label="Next month">›</button>
+    <button id="calNext" data-icon="right" aria-label="Next month"></button>
   </div>
   <div class="dow"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
   <div class="grid" id="calGrid"></div>
   <button class="done" id="calClose">Close</button>
 </div>
 
-<div class="sheet" id="cfgSheet">
+<div class="sheet" id="delSheet" role="dialog" aria-modal="true" aria-labelledby="delTitle">
   <div class="grip"></div>
-  <h2>Connect your Google Sheet</h2>
+  <h2 id="delTitle">Delete this expense?</h2>
+  <p class="note" id="delNote">This can't be undone.</p>
+  <div class="delcard">
+    <div class="ic" id="delIcon"></div>
+    <div class="mid">
+      <div class="t1" id="delCat"></div>
+      <div class="t2" id="delMeta"></div>
+    </div>
+    <div class="amt tnum" id="delAmt"></div>
+  </div>
+  <button class="danger" id="delConfirm">Delete expense</button>
+  <button class="done" id="delCancel">Keep it</button>
+</div>
+
+<div class="sheet" id="editSheet" role="dialog" aria-modal="true" aria-labelledby="editTitle">
+  <div class="grip"></div>
+  <h2 id="editTitle">Edit expense</h2>
+  <p class="note" id="editNote"></p>
+  <label for="eAmount">Amount</label>
+  <input id="eAmount" type="text" inputmode="decimal" autocomplete="off" placeholder="0">
+  <label>Category</label>
+  <div class="chips" id="eCats"></div>
+  <label for="eDate">Date</label>
+  <input id="eDate" type="date">
+  <label for="eNote">Note</label>
+  <input id="eNote" type="text" maxlength="200" autocomplete="off" placeholder="Optional">
+  <div class="err hidden" id="eErr"></div>
+  <button class="primary" id="eSave">Save changes</button>
+  <button class="done" id="eCancel">Cancel</button>
+</div>
+
+<div class="sheet" id="setSheet" role="dialog" aria-modal="true" aria-labelledby="setTitle">
+  <div class="grip"></div>
+  <h2 id="setTitle">Settings</h2>
+  <p class="note">Everything here stays on this phone, encrypted with your passcode.</p>
+  <button class="srow" id="sBudget">
+    <span class="ic" data-icon="target"></span>
+    <span class="mid"><span class="t1">Monthly budget</span><span class="t2" id="sBudgetSub"></span></span>
+    <span class="go" data-icon="right"></span>
+  </button>
+  <button class="srow" id="sSheet">
+    <span class="ic" data-icon="sheet"></span>
+    <span class="mid"><span class="t1">Google Sheet</span><span class="t2" id="sSheetSub"></span></span>
+    <span class="go" data-icon="right"></span>
+  </button>
+  <button class="srow" id="sQueue">
+    <span class="ic" data-icon="cloud"></span>
+    <span class="mid"><span class="t1">Sync queue</span><span class="t2" id="sQueueSub"></span></span>
+    <span class="go" data-icon="right"></span>
+  </button>
+  <button class="srow" id="sPass">
+    <span class="ic" data-icon="key"></span>
+    <span class="mid"><span class="t1">Passcode</span><span class="t2" id="sPassSub"></span></span>
+    <span class="go" data-icon="right"></span>
+  </button>
+  <button class="srow" id="sLock">
+    <span class="ic" data-icon="lock"></span>
+    <span class="mid"><span class="t1">Lock now</span><span class="t2">Ask for the passcode again</span></span>
+    <span class="go" data-icon="right"></span>
+  </button>
+  <button class="done" id="setClose">Close</button>
+</div>
+
+<div class="sheet" id="budSheet" role="dialog" aria-modal="true" aria-labelledby="budTitle">
+  <div class="grip"></div>
+  <h2 id="budTitle">Monthly budget</h2>
+  <p class="note">A cap for each calendar month. The hero shows what's left and the pace
+     you're on, so you can see an overspend coming rather than discovering it.</p>
+  <label for="budInput">Budget in rupees (0 turns it off)</label>
+  <input id="budInput" type="text" inputmode="numeric" autocomplete="off" placeholder="15000">
+  <button class="primary" id="budSave">Save budget</button>
+  <button class="done" id="budClose">Close</button>
+</div>
+
+<div class="sheet" id="queueSheet" role="dialog" aria-modal="true" aria-labelledby="queueTitle">
+  <div class="grip"></div>
+  <h2 id="queueTitle">Sync queue</h2>
+  <p class="note">Changes waiting to reach your Sheet. Discarding an unsent expense removes
+     it from this phone too — anything already in the Sheet is untouched.</p>
+  <div id="queueList"></div>
+  <button class="primary" id="queueRetry">Try again now</button>
+  <button class="done" id="queueClose">Close</button>
+</div>
+
+<div class="sheet" id="cfgSheet" role="dialog" aria-modal="true" aria-labelledby="cfgTitle">
+  <div class="grip"></div>
+  <h2 id="cfgTitle">Connect your Google Sheet</h2>
   <p class="note">Paste the web app URL from your Apps Script deployment and the secret you set
-     in <b>Code.gs</b>. These stay on this phone. You can keep logging expenses without them —
-     nothing will sync until they're filled in.</p>
+     in <b>Code.gs</b>. These stay on this phone, encrypted with your passcode. You can keep
+     logging expenses without them — nothing will sync until they're filled in.</p>
   <label for="cfgUrl">Web app URL (ends in /exec)</label>
   <input id="cfgUrl" type="url" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off">
   <label for="cfgSecret">Secret</label>
@@ -293,42 +555,473 @@
   <button class="done" id="cfgClose">Close</button>
 </div>
 
+<div class="sheet" id="passSheet" role="dialog" aria-modal="true" aria-labelledby="passTitle">
+  <div class="grip"></div>
+  <h2 id="passTitle">App passcode</h2>
+  <p class="note">The passcode lives in <b>APP_PASSCODE</b> in your Apps Script, not in
+     this app and not on this phone — so it is never sent to a browser and can't be read
+     out of the page. Anyone who knows it can get in on any device.</p>
+  <p class="note"><b>To change it:</b> edit <b>APP_PASSCODE</b> in pwa-sync-api.gs, save,
+     and redeploy the web app. Every device keeps working offline until its next sync,
+     then asks for the new passcode. Nothing queued is lost in the swap.</p>
+  <p class="note">Wrong guesses are counted by the script: after 15 in ten minutes it
+     stops answering. Run <b>resetPasscodeAttempts</b> in the editor if that ever catches
+     you out.</p>
+  <button class="done" id="pClose">Close</button>
+</div>
+
 <script>
 (function () {
   'use strict';
 
+  // ─────────────────────────────────────────────────────────────────
+  //  THE PASSCODE IS NOT IN THIS FILE.
+  //
+  //  It lives in APP_PASSCODE in pwa-sync-api.gs, which runs on Google's side and
+  //  is never served to a browser, so it cannot be read out of the page source.
+  //
+  //  First unlock on a new device asks the Sheet whether the passcode is right,
+  //  which needs a connection. After that the device verifies offline by opening
+  //  its own encrypted store with the key that passcode derives — so a wrong
+  //  passcode simply fails to decrypt anything.
+  // ─────────────────────────────────────────────────────────────────
+
+  // Line icons, 24×24, drawn with currentColor so they follow the theme.
+  var ICONS = {
+    food:      '<path d="M6 3v5a2.2 2.2 0 0 0 4.4 0V3"/><path d="M8.2 10.2V21"/>' +
+               '<ellipse cx="16.6" cy="6.6" rx="2.6" ry="3.6"/><path d="M16.6 10.2V21"/>',
+    groceries: '<circle cx="9.5" cy="19.8" r="1.5"/><circle cx="17.5" cy="19.8" r="1.5"/>' +
+               '<path d="M2.6 3.2h2.3l2.6 11.1a1.6 1.6 0 0 0 1.6 1.2h8.5a1.6 1.6 0 0 0 1.5-1.2L21 7.2H6"/>',
+    transport: '<path d="M5 17v-4l2.2-4.4A2 2 0 0 1 9 7.5h6a2 2 0 0 1 1.8 1.1L19 13v4"/>' +
+               '<path d="M3.6 13h16.8"/><circle cx="8" cy="17.4" r="1.7"/><circle cx="16" cy="17.4" r="1.7"/>',
+    fuel:      '<path d="M4.2 21V5a2 2 0 0 1 2-2h4.6a2 2 0 0 1 2 2v16"/><path d="M2.6 21h11.8"/>' +
+               '<path d="M4.2 11h8.6"/><path d="M12.8 7.6h3.4a2 2 0 0 1 2 2v7.2a1.7 1.7 0 0 0 3.4 0v-6l-1.9-3.4"/>',
+    bills:     '<path d="M5.2 3h13.6v18l-2.3-1.6L14.2 21 12 19.4 9.8 21 7.5 19.4 5.2 21z"/>' +
+               '<path d="M8.6 8.4h6.8M8.6 12.4h6.8"/>',
+    rent:      '<path d="M3.4 10.6 12 3.4l8.6 7.2"/><path d="M5.6 9.4V20.4h12.8V9.4"/>' +
+               '<path d="M9.8 20.4v-5.6h4.4v5.6"/>',
+    shopping:  '<path d="M4.6 8h14.8l-1.2 12.1a1 1 0 0 1-1 .9H6.8a1 1 0 0 1-1-.9z"/>' +
+               '<path d="M8.6 8V6a3.4 3.4 0 0 1 6.8 0v2"/>',
+    health:    '<path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z"/>' +
+               '<path d="m8.5 8.5 7 7"/>',
+    fun:       '<rect x="3.2" y="4.2" width="17.6" height="15.6" rx="2.4"/>' +
+               '<path d="M3.2 9.4h17.6M3.2 14.6h17.6M8.4 4.2v15.6M15.6 4.2v15.6"/>',
+    other:     '<circle cx="12" cy="12" r="8.6"/><path d="M12 8.4v7.2M8.4 12h7.2"/>',
+    plus:      '<circle cx="12" cy="12" r="8.6"/><path d="M12 8.4v7.2M8.4 12h7.2"/>',
+    list:      '<path d="M8.6 6.2h11.8M8.6 12h11.8M8.6 17.8h11.8"/>' +
+               '<circle cx="4.2" cy="6.2" r="1.2"/><circle cx="4.2" cy="12" r="1.2"/>' +
+               '<circle cx="4.2" cy="17.8" r="1.2"/>',
+    chart:     '<path d="M4 3.6v16.8h16.4"/><path d="M8.4 20.4v-6M13 20.4v-9.6M17.6 20.4v-4.2"/>',
+    calendar:  '<rect x="3.4" y="5.2" width="17.2" height="15.4" rx="2.4"/>' +
+               '<path d="M3.4 10.2h17.2M8.2 3v4.2M15.8 3v4.2"/>',
+    close:     '<path d="M6.4 6.4l11.2 11.2M17.6 6.4 6.4 17.6"/>',
+    backspace: '<path d="M20 5.4H9.7a2 2 0 0 0-1.5.7L3.4 12l4.8 5.9a2 2 0 0 0 1.5.7H20a1.6 1.6 0 0 0 1.6-1.6V7a1.6 1.6 0 0 0-1.6-1.6z"/>' +
+               '<path d="m11.8 9.6 4.8 4.8M16.6 9.6l-4.8 4.8"/>',
+    left:      '<path d="M14.6 5.4 8 12l6.6 6.6"/>',
+    right:     '<path d="M9.4 5.4 16 12l-6.6 6.6"/>',
+    lock:      '<rect x="4.6" y="10.4" width="14.8" height="10.4" rx="2.4"/>' +
+               '<path d="M8.2 10.4V7.6a3.8 3.8 0 0 1 7.6 0v2.8"/><path d="M12 14.6v2.2"/>',
+    key:       '<circle cx="8.6" cy="15.4" r="3.6"/>' +
+               '<path d="m11.2 12.8 8.4-8.4M16.8 5.2l2.4 2.4M14.2 7.8l2.4 2.4"/>',
+    target:    '<circle cx="12" cy="12" r="8.4"/><circle cx="12" cy="12" r="4.2"/>' +
+               '<circle cx="12" cy="12" r="1"/>',
+    cloud:     '<path d="M17.2 18.6H7a4.6 4.6 0 0 1-.7-9.1 6.1 6.1 0 0 1 11.7 1.7 3.8 3.8 0 0 1-.8 7.4z"/>' +
+               '<path d="M12 15.4V9.6M9.6 12 12 9.6l2.4 2.4"/>',
+    sheet:     '<rect x="3.4" y="4.4" width="17.2" height="15.2" rx="2.2"/>' +
+               '<path d="M3.4 9.6h17.2M9.6 9.6v10M3.4 14.6h17.2"/>',
+    settings:  '<circle cx="12" cy="12" r="3.1"/>' +
+               '<path d="M18.9 14.7a1.6 1.6 0 0 0 .3 1.8l.1.1a1.9 1.9 0 1 1-2.7 2.7l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.4v.3a1.9 1.9 0 1 1-3.8 0v-.2a1.6 1.6 0 0 0-1-1.4 1.6 1.6 0 0 0-1.8.3l-.1.1a1.9 1.9 0 1 1-2.7-2.7l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.4-1H2.9a1.9 1.9 0 1 1 0-3.8h.2a1.6 1.6 0 0 0 1.4-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a1.9 1.9 0 1 1 2.7-2.7l.1.1a1.6 1.6 0 0 0 1.8.3h.1a1.6 1.6 0 0 0 1-1.4V2.9a1.9 1.9 0 1 1 3.8 0v.2a1.6 1.6 0 0 0 1 1.4 1.6 1.6 0 0 0 1.8-.3l.1-.1a1.9 1.9 0 1 1 2.7 2.7l-.1.1a1.6 1.6 0 0 0-.3 1.8v.1a1.6 1.6 0 0 0 1.4 1h.3a1.9 1.9 0 1 1 0 3.8h-.2a1.6 1.6 0 0 0-1.4 1z"/>'
+  };
+  function svg(name) {
+    return '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+      'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+      (ICONS[name] || ICONS.bills) + '</svg>';
+  }
+
   var CATEGORIES = [
-    { name: 'Food', icon: '🍽️' }, { name: 'Groceries', icon: '🛒' },
-    { name: 'Transport', icon: '🚕' }, { name: 'Fuel', icon: '⛽' },
-    { name: 'Bills', icon: '🧾' }, { name: 'Rent', icon: '🏠' },
-    { name: 'Shopping', icon: '🛍️' }, { name: 'Health', icon: '💊' },
-    { name: 'Fun', icon: '🎬' }, { name: 'Other', icon: '➕' }
+    { name: 'Food', icon: 'food' }, { name: 'Groceries', icon: 'groceries' },
+    { name: 'Transport', icon: 'transport' }, { name: 'Fuel', icon: 'fuel' },
+    { name: 'Bills', icon: 'bills' }, { name: 'Rent', icon: 'rent' },
+    { name: 'Shopping', icon: 'shopping' }, { name: 'Health', icon: 'health' },
+    { name: 'Fun', icon: 'fun' }, { name: 'Other', icon: 'other' }
   ];
   var MONTHS = ['January','February','March','April','May','June',
                 'July','August','September','October','November','December'];
   var SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  var K = { entries: 'ledger.entries', outbox: 'ledger.outbox', cfg: 'ledger.cfg' };
+
+  // ledger.lock holds the passcode salt + verifier; ledger.vault holds the encrypted
+  // payload. The three legacy.* keys are the old plaintext layout, read once and erased.
+  var K = {
+    lock: 'ledger.lock', vault: 'ledger.vault', dsalt: 'ledger.dsalt',
+    legacy: { entries: 'ledger.entries', outbox: 'ledger.outbox', cfg: 'ledger.cfg' }
+  };
+  var PERIODS = [
+    { key: 'month', label: 'This month' }, { key: 'last', label: 'Last month' },
+    { key: '7d', label: 'Last 7 days' }, { key: 'all', label: 'All time' }
+  ];
+  var STUCK_AFTER = 3;        // failed attempts before an op is called stuck
+  var AUTOLOCK_MS = 120000;   // re-ask for the passcode after 2 minutes in the background
+  var PBKDF2_ITER = 210000;
 
   var entries = [];     // every expense known to this phone
   var outbox = [];      // changes not yet written to the Sheet
-  var cfg = { url: '', secret: '' };
+  var cfg = { url: '', secret: '', budget: 0 };
+  var filter = { period: 'month', category: 'all', text: '' };
   var amount = '', category = CATEGORIES[0].name, chosenDate = '';
-  var syncing = false, calY = 0, calM = 0;
+  var syncing = false, calY = 0, calM = 0, insightsMonth = '';
+  var pendingDelete = null, editing = null, updateReady = false;
+  var lockMode = 'unlock', hiddenAt = 0;
+  var V = null;
 
   function $(id) { return document.getElementById(id); }
 
-  // ── Storage ──────────────────────────────────────────────────────
-  function load() {
-    try { entries = JSON.parse(localStorage.getItem(K.entries) || '[]'); } catch (e) { entries = []; }
-    try { outbox = JSON.parse(localStorage.getItem(K.outbox) || '[]'); } catch (e) { outbox = []; }
-    try { cfg = JSON.parse(localStorage.getItem(K.cfg) || 'null') || cfg; } catch (e) {}
+  // ── Passcode + encryption ────────────────────────────────────────
+  // The passcode itself is never stored: PBKDF2 stretches it into 384 bits, the first
+  // 256 become the AES-GCM key (memory only) and the next 128 are kept as a verifier,
+  // which proves the passcode is right without revealing anything about it.
+  var SUB = (window.crypto && window.crypto.subtle) ? window.crypto.subtle : null;
+  // pass is kept in memory only, and only because every sync has to present it to the
+  // Sheet. It is dropped the moment the app locks.
+  var vault = { key: null, pass: '', salt: null, iter: PBKDF2_ITER, ready: false, plain: false };
+  var pendingAuth = null;
+  var writeChain = Promise.resolve();
+
+  function b64(buf) {
+    var b = new Uint8Array(buf), s = '';
+    for (var i = 0; i < b.length; i++) s += String.fromCharCode(b[i]);
+    return btoa(s);
   }
-  function save() {
+  function unb64(str) {
+    var s = atob(str), b = new Uint8Array(s.length);
+    for (var i = 0; i < s.length; i++) b[i] = s.charCodeAt(i);
+    return b;
+  }
+  function randBytes(n) {
+    var b = new Uint8Array(n); window.crypto.getRandomValues(b); return b;
+  }
+  function sameBytes(a, b) {
+    if (a.length !== b.length) return false;
+    var diff = 0;
+    for (var i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+    return diff === 0;   // constant time, so a wrong passcode leaks nothing by timing
+  }
+  function derive(pass, salt, iter) {
+    return SUB.importKey('raw', new TextEncoder().encode(pass),
+                         { name: 'PBKDF2' }, false, ['deriveBits'])
+      .then(function (base) {
+        return SUB.deriveBits({ name: 'PBKDF2', salt: salt, iterations: iter,
+                                hash: 'SHA-256' }, base, 384);
+      })
+      .then(function (bits) {
+        var all = new Uint8Array(bits);
+        return SUB.importKey('raw', all.slice(0, 32), { name: 'AES-GCM' },
+                             false, ['encrypt', 'decrypt'])
+          .then(function (key) { return { key: key, verifier: all.slice(32, 48) }; });
+      });
+  }
+  function encryptSnapshot(key) {
+    var iv = randBytes(12);
+    var body = new TextEncoder().encode(JSON.stringify(snapshot()));
+    return SUB.encrypt({ name: 'AES-GCM', iv: iv }, key, body)
+      .then(function (ct) { return { v: 1, iv: b64(iv), ct: b64(ct) }; });
+  }
+  function decryptVault(key, box) {
+    return SUB.decrypt({ name: 'AES-GCM', iv: unb64(box.iv) }, key, unb64(box.ct))
+      .then(function (pt) { return JSON.parse(new TextDecoder().decode(pt)); });
+  }
+  function snapshot() {
+    return { entries: entries, outbox: outbox, cfg: cfg, filter: filter };
+  }
+  function adopt(data) {
+    entries = (data && data.entries) || [];
+    outbox = (data && data.outbox) || [];
+    if (data && data.cfg) {
+      cfg.url = data.cfg.url || ''; cfg.secret = data.cfg.secret || '';
+      cfg.budget = Number(data.cfg.budget) || 0;
+    }
+    if (data && data.filter) {
+      filter.period = data.filter.period || 'month';
+      filter.category = data.filter.category || 'all';
+      filter.text = data.filter.text || '';
+    }
+    outbox.forEach(function (o) {          // nothing is in flight after a cold start
+      o.sent = false;
+      if (!o.opId) o.opId = uid();
+    });
+  }
+  function readJSON(k) {
+    try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; }
+  }
+  function legacyData() {
+    var d = { entries: readJSON(K.legacy.entries) || [],
+              outbox: readJSON(K.legacy.outbox) || [],
+              cfg: readJSON(K.legacy.cfg) || null };
+    return (d.entries.length || d.outbox.length || d.cfg) ? d : null;
+  }
+  function dropLegacy() {
     try {
-      localStorage.setItem(K.entries, JSON.stringify(entries));
-      localStorage.setItem(K.outbox, JSON.stringify(outbox));
-      localStorage.setItem(K.cfg, JSON.stringify(cfg));
-    } catch (e) { toast('This phone is out of storage space.', true); }
+      localStorage.removeItem(K.legacy.entries);
+      localStorage.removeItem(K.legacy.outbox);
+      localStorage.removeItem(K.legacy.cfg);
+    } catch (e) {}
+  }
+
+  // Writes are queued so two saves can't interleave, and each one captures the key it
+  // started with — locking mid-write still finishes the write already in progress.
+  function save() {
+    if (!vault.ready) return;
+    if (vault.plain) {
+      try { localStorage.setItem(K.vault, JSON.stringify({ v: 1, plain: true, data: snapshot() })); }
+      catch (e) { toast('This phone is out of storage space.', { bad: true }); }
+      return;
+    }
+    var key = vault.key;
+    if (!key) return;
+    writeChain = writeChain
+      .then(function () { return encryptSnapshot(key); })
+      .then(function (box) { localStorage.setItem(K.vault, JSON.stringify(box)); })
+      .catch(function () { toast('Could not save on this phone.', { bad: true }); });
+  }
+
+  function revealPass(on) {
+    $('lockPass').type = on ? 'text' : 'password';
+    $('lockReveal').textContent = on ? 'Hide passcode' : 'Show passcode';
+  }
+  function showLock(mode) {
+    lockMode = mode;
+    document.body.classList.add('locked');
+    $('lock').classList.remove('hidden');
+    $('lockErr').classList.add('hidden');
+    $('lockPass').value = '';
+    revealPass(false);
+    $('lockSkip').classList.add('hidden');
+    $('lockAlt').classList.add('hidden');
+    $('lockUrl').classList.add('hidden');
+    $('lockSecret').classList.add('hidden');
+    $('lockPass').classList.remove('hidden');
+    $('lockReveal').parentNode.classList.remove('hidden');
+    $('lockGo').classList.remove('hidden');
+    $('lockGo').disabled = false;
+    if (mode === 'first') {
+      $('lockTitle').textContent = 'Connect this device';
+      $('lockNote').textContent = 'Your Sheet checks the passcode the first time, so this ' +
+        'one screen needs a connection. Afterwards the app opens offline.';
+      $('lockUrl').classList.remove('hidden');
+      $('lockSecret').classList.remove('hidden');
+      $('lockUrl').value = pendingAuth ? pendingAuth.url : '';
+      $('lockSecret').value = pendingAuth ? pendingAuth.secret : '';
+      $('lockPass').setAttribute('autocomplete', 'current-password');
+      $('lockGo').textContent = 'Check and unlock';
+      $('lockAlt').classList.remove('hidden');
+      $('lockAlt').textContent = 'Set up without a Sheet';
+    } else if (mode === 'changed') {
+      $('lockTitle').textContent = 'The passcode changed';
+      $('lockNote').textContent = 'Your Sheet no longer accepts the passcode this device ' +
+        'was using. Enter the new one — nothing queued is lost, it is carried across.';
+      $('lockPass').setAttribute('autocomplete', 'current-password');
+      $('lockGo').textContent = 'Check and unlock';
+    } else if (mode === 'nocrypto') {
+      // No passcode can protect anything here, and refusing outright would leave the app
+      // unusable — so this is the one screen that still offers a way past the lock.
+      $('lockTitle').textContent = 'Encryption unavailable';
+      $('lockNote').textContent = 'This browser only allows encryption over HTTPS or on ' +
+        'localhost. Serve Ledger over HTTPS to lock it, or continue with data stored in plain text.';
+      $('lockPass').classList.add('hidden');
+      $('lockReveal').parentNode.classList.add('hidden');
+      $('lockGo').classList.add('hidden');
+      $('lockSkip').classList.remove('hidden');
+      $('lockSkip').textContent = 'Continue unprotected';
+    } else {
+      $('lockTitle').textContent = 'Ledger';
+      $('lockNote').textContent = 'Enter your passcode to unlock.';
+      $('lockPass').placeholder = 'Passcode';
+      $('lockPass').setAttribute('autocomplete', 'current-password');
+      $('lockGo').textContent = 'Unlock';
+      $('lockAlt').classList.remove('hidden');
+      $('lockAlt').textContent = 'Locked with an older passcode? Start over';
+    }
+    setTimeout(function () { if (lockMode !== 'nocrypto') $('lockPass').focus(); }, 60);
+  }
+  function lockError(msg) {
+    var el = $('lockErr');
+    el.textContent = msg; el.classList.remove('hidden');
+    $('lockGo').disabled = false;
+  }
+  function startApp() {
+    vault.ready = true;
+    document.body.classList.remove('locked');
+    $('lock').classList.add('hidden');
+    if (!insightsMonth) insightsMonth = ymd(new Date()).slice(0, 7);
+    var want = (new URLSearchParams(location.search).get('tab') || 'add').toLowerCase();
+    show(['add', 'history', 'charts'].indexOf(want) > -1 ? want : 'add');
+    paintAll();
+    sync(true);
+  }
+  // Carries the connection details and the unsent queue through the re-check, so a
+  // changed passcode costs nothing but the typing.
+  function passcodeRejected() {
+    pendingAuth = { url: cfg.url, secret: cfg.secret, outbox: outbox.slice() };
+    lockNow();
+    showLock('changed');
+    toast('Your Sheet no longer accepts this passcode', { bad: true });
+  }
+  function lockNow() {
+    closeSheets();
+    vault.key = null; vault.pass = ''; vault.ready = false;
+    entries = []; outbox = []; cfg = { url: '', secret: '', budget: 0 };
+    amount = ''; pendingDelete = null; editing = null;
+    $('list').innerHTML = ''; $('charts').innerHTML = '';
+    showLock('unlock');
+  }
+  // One random salt per device, so the same passcode still yields a different key on
+  // each phone. A salt is not a secret; it only stops one cracking table covering
+  // every device at once.
+  function deviceSalt() {
+    var s = localStorage.getItem(K.dsalt);
+    if (s) { try { return unb64(s); } catch (e) {} }
+    var salt = randBytes(16);
+    try { localStorage.setItem(K.dsalt, b64(salt)); } catch (e) {}
+    return salt;
+  }
+
+  // Asks the Sheet whether this passcode is the one in APP_PASSCODE. Also the first
+  // sync, so a new device arrives with all of its history already in hand.
+  function verifyWithSheet(url, secret, pass, ops) {
+    return fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ secret: secret, passcode: pass, ops: ops || [] })
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!data) throw new Error('The Sheet sent nothing back.');
+        if (!data.ok) throw new Error(data.error || 'The Sheet refused the request.');
+        return data;
+      });
+  }
+
+  function handleLockGo() {
+    var pass = $('lockPass').value;
+    $('lockGo').disabled = true;
+    $('lockErr').classList.add('hidden');
+
+    // ── A device the Sheet has never seen, or one whose passcode was changed ──
+    if (lockMode === 'first' || lockMode === 'changed') {
+      var url = (lockMode === 'changed' ? pendingAuth.url : $('lockUrl').value).trim();
+      var secret = (lockMode === 'changed' ? pendingAuth.secret : $('lockSecret').value).trim();
+      var carried = (lockMode === 'changed' && pendingAuth) ? pendingAuth.outbox : [];
+      if (!pass) return lockError('Enter the passcode.');
+      if (!url || !secret) return lockError('The web app URL and secret are both needed.');
+      if (!navigator.onLine) {
+        return lockError('This step needs a connection — the Sheet is what checks the passcode.');
+      }
+      $('lockNote').textContent = 'Asking your Sheet…';
+      verifyWithSheet(url, secret, pass, (carried || []).map(wireOp))
+        .then(function (data) {
+          var salt = deviceSalt();
+          return derive(pass, salt, PBKDF2_ITER).then(function (d) {
+            vault.key = d.key; vault.salt = salt; vault.pass = pass; vault.ready = true;
+            adopt(legacyData());          // anything an older build left behind
+            if (carried && carried.length) outbox = carried;
+            cfg.url = url; cfg.secret = secret;
+            if (Object.prototype.toString.call(data.entries) === '[object Array]') {
+              var server = data.entries.map(function (e) { e.pending = false; return e; });
+              entries = applyOps(server, outbox);   // unsent local changes stay visible
+            }
+            pendingAuth = null;
+            dropLegacy();
+            try { localStorage.removeItem(K.lock); } catch (e) {}
+            save();
+            startApp();
+            toast('Unlocked · ' + entries.length +
+                  (entries.length === 1 ? ' expense' : ' expenses') + ' from your Sheet');
+          });
+        })
+        .catch(function (err) {
+          var msg = String(err && err.message || err);
+          if (msg.indexOf('Bad passcode') > -1) lockError('Your Sheet rejected that passcode.');
+          else if (msg.indexOf('Bad secret') > -1) lockError('Your Sheet rejected that secret.');
+          else if (msg.indexOf('Too many') > -1) lockError(msg);
+          else lockError('Could not reach your Sheet. Check the URL and try again.');
+          $('lockNote').textContent = lockMode === 'changed'
+            ? 'Your Sheet no longer accepts the passcode this device was using.'
+            : 'Your Sheet checks the passcode the first time, so this one screen needs a connection.';
+        });
+      return;
+    }
+
+    // ── Returning device: the stored ledger is its own verifier, so this works offline ──
+    if (!pass) return lockError('Enter the passcode.');
+    var salt = deviceSalt();
+    derive(pass, salt, PBKDF2_ITER).then(function (d) {
+      var box = readJSON(K.vault);
+      if (!box) { $('lockGo').disabled = false; showLock('first'); return; }
+      if (box.plain) {
+        vault.key = d.key; vault.salt = salt; vault.pass = pass;
+        vault.plain = false; vault.ready = true;
+        adopt(box.data); save(); startApp();
+        return;
+      }
+      return decryptVault(d.key, box).then(function (data) {
+        vault.key = d.key; vault.salt = salt; vault.pass = pass; vault.ready = true;
+        adopt(data);
+        $('lockGo').disabled = false;
+        startApp();
+      });
+    }).catch(function () {
+      // AES-GCM is authenticated, so a failure here means the key was wrong — which
+      // is exactly what a wrong passcode produces. No stored hash needed.
+      lockError('Wrong passcode.');
+    });
+  }
+
+  // Wipes only this device's copy, then sends it back through the Sheet's check. Not a
+  // way in: 'first' mode still has to satisfy APP_PASSCODE before anything opens.
+  function startOver() {
+    try {
+      localStorage.removeItem(K.vault);
+      localStorage.removeItem(K.lock);
+      localStorage.removeItem(K.dsalt);
+    } catch (e) {}
+    adopt(null);
+    vault.key = null; vault.pass = ''; vault.ready = false;
+    showLock('first');
+    toast('Cleared this device. Connect it again to pull your expenses back.');
+  }
+  function setupWithoutSheet() {
+    var pass = $('lockPass').value;
+    if (pass.length < 4) return lockError('Use at least 4 characters.');
+    var salt = deviceSalt();
+    derive(pass, salt, PBKDF2_ITER).then(function (d) {
+      vault.key = d.key; vault.salt = salt; vault.pass = pass; vault.ready = true;
+      adopt(legacyData());
+      dropLegacy();
+      save();
+      startApp();
+      toast('Local only · connect a Sheet later from Settings');
+    }).catch(function () { lockError('Could not set up on this device.'); });
+  }
+  function continueUnprotected() {
+    var box = readJSON(K.vault);
+    // An encrypted ledger already here must never be traded for an empty plaintext one.
+    if (readJSON(K.lock) && box && !box.plain) {
+      lockError('This phone already holds an encrypted ledger. It can only be opened with ' +
+                'its passcode, over HTTPS or on localhost.');
+      return;
+    }
+    vault.plain = true; vault.key = null; vault.ready = true;
+    if (box && box.plain) adopt(box.data);
+    else { adopt(legacyData()); dropLegacy(); }
+    save();
+    startApp();
+    toast('Data is stored unencrypted on this phone', { bad: true });
+  }
+  function boot() {
+    if (!SUB) { showLock('nocrypto'); return; }
+    // Only an encrypted store can verify a passcode offline. Data left by an older
+    // build has no passcode attached to it, so that device goes through the Sheet
+    // once — the "Set up without a Sheet" link is the offline way out.
+    showLock(readJSON(K.vault) ? 'unlock' : 'first');
   }
 
   // ── Helpers ──────────────────────────────────────────────────────
@@ -343,7 +1036,7 @@
     return d.getFullYear() + '-' + (m < 10 ? '0' + m : m) + '-' + (day < 10 ? '0' + day : day);
   }
   function prettyDate(iso) {
-    var p = iso.split('-');
+    var p = String(iso).split('-');
     return Number(p[2]) + ' ' + SHORT[Number(p[1]) - 1] + ' ' + p[0];
   }
   function clockOf(iso) {
@@ -353,50 +1046,49 @@
   }
   function iconFor(name) {
     for (var i = 0; i < CATEGORIES.length; i++) if (CATEGORIES[i].name === name) return CATEGORIES[i].icon;
-    return '🧾';
+    return 'bills';
   }
   function uid() {
     return 'e' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   }
-  function toast(msg, bad) {
+  function toast(msg, opts) {
+    opts = opts || {};
     var old = $('toast'); if (old) old.remove();
     var t = document.createElement('div');
-    t.id = 'toast'; if (bad) t.className = 'bad';
-    t.textContent = msg;
+    t.id = 'toast'; if (opts.bad) t.className = 'bad';
+    t.setAttribute('role', 'status');
+    t.setAttribute('aria-live', 'polite');
+    var span = document.createElement('span');
+    span.textContent = msg;
+    t.appendChild(span);
+    if (opts.action) {
+      var b = document.createElement('button');
+      b.className = 'act';
+      b.textContent = opts.action.label;
+      b.onclick = function () { t.remove(); opts.action.fn(); };
+      t.appendChild(b);
+    }
     document.body.appendChild(t);
-    setTimeout(function () { if (t.parentNode) t.remove(); }, 3400);
+    setTimeout(function () { if (t.parentNode) t.remove(); }, opts.ms || 3400);
   }
   function buzz(ms) { if (navigator.vibrate) { try { navigator.vibrate(ms); } catch (e) {} } }
+  function daysIn(y, m) { return new Date(y, m + 1, 0).getDate(); }
 
   // ── Aggregation, all done on the device ──────────────────────────
   function summarise() {
     var now = new Date();
     var today = ymd(now), mk = today.slice(0, 7);
-    var dim = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
 
     var monthTotal = 0, todayTotal = 0, monthCount = 0;
-    var byCat = {}, byDay = {}, byMonth = {};
+    var byMonth = {};
 
     entries.forEach(function (e) {
       var k = e.date.slice(0, 7);
       byMonth[k] = (byMonth[k] || 0) + e.amount;
       if (k !== mk) return;
       monthTotal += e.amount; monthCount++;
-      byCat[e.category] = (byCat[e.category] || 0) + e.amount;
-      byDay[e.date] = (byDay[e.date] || 0) + e.amount;
       if (e.date === today) todayTotal += e.amount;
     });
-
-    var breakdown = Object.keys(byCat).map(function (k) {
-      return { category: k, amount: byCat[k],
-               share: monthTotal ? Math.round((byCat[k] / monthTotal) * 100) : 0 };
-    }).sort(function (a, b) { return b.amount - a.amount; });
-
-    var daily = [];
-    for (var d = 1; d <= dim; d++) {
-      var key = mk + '-' + (d < 10 ? '0' + d : d);
-      daily.push({ day: d, amount: byDay[key] || 0, isToday: key === today });
-    }
 
     var trend = [];
     for (var i = 5; i >= 0; i--) {
@@ -412,26 +1104,68 @@
 
     return {
       today: today, yesterday: ymd(new Date(now.getTime() - 864e5)),
+      monthKey: mk,
+      lastMonthKey: ymd(new Date(now.getFullYear(), now.getMonth() - 1, 1)).slice(0, 7),
+      weekStart: ymd(new Date(now.getTime() - 6 * 864e5)),
+      earliestMonth: sorted.length ? sorted[sorted.length - 1].date.slice(0, 7) : mk,
+      all: sorted,
       todayLabel: now.toLocaleDateString('en-IN',
         { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }),
       monthLabel: MONTHS[now.getMonth()] + ' ' + now.getFullYear(),
       monthTotal: monthTotal, todayTotal: todayTotal, monthCount: monthCount,
+      dayOfMonth: now.getDate(), dim: daysIn(now.getFullYear(), now.getMonth()),
       dailyAverage: monthTotal / now.getDate(),
-      breakdown: breakdown, daily: daily, trend: trend, recent: sorted.slice(0, 80)
+      trend: trend
     };
   }
-  var V = null;
+
+  // Everything the Insights tab shows for one month, so it can look at any month.
+  function monthStats(mk) {
+    var y = Number(mk.slice(0, 4)), m = Number(mk.slice(5, 7)) - 1;
+    var byCat = {}, byDay = {}, total = 0, count = 0;
+    entries.forEach(function (e) {
+      if (e.date.slice(0, 7) !== mk) return;
+      total += e.amount; count++;
+      byCat[e.category] = (byCat[e.category] || 0) + e.amount;
+      byDay[e.date] = (byDay[e.date] || 0) + e.amount;
+    });
+    var dim = daysIn(y, m), daily = [];
+    for (var d = 1; d <= dim; d++) {
+      var key = mk + '-' + (d < 10 ? '0' + d : d);
+      daily.push({ day: d, amount: byDay[key] || 0, isToday: key === V.today });
+    }
+    var breakdown = Object.keys(byCat).map(function (k) {
+      return { category: k, amount: byCat[k],
+               share: total ? Math.round((byCat[k] / total) * 100) : 0 };
+    }).sort(function (a, b) { return b.amount - a.amount; });
+    return { key: mk, label: MONTHS[m] + ' ' + y, shortLabel: SHORT[m],
+             total: total, count: count, daily: daily, breakdown: breakdown };
+  }
 
   // ── Sync ─────────────────────────────────────────────────────────
+  function stuckOps() {
+    return outbox.filter(function (o) { return (o.tries || 0) >= STUCK_AFTER; });
+  }
   function paintStatus() {
     var el = $('status'), txt = $('statusText'), act = $('statusAct');
     el.className = 'status';
+    if (updateReady) {
+      el.classList.add('wait');
+      txt.textContent = 'A new version is ready';
+      act.textContent = 'Reload';
+      return;
+    }
+    var stuck = stuckOps().length;
     if (!cfg.url || !cfg.secret) {
       el.classList.add('off');
       txt.textContent = 'Saving on this phone only';
       act.textContent = 'Connect Sheet';
     } else if (syncing) {
       el.classList.add('wait'); txt.textContent = 'Syncing…'; act.textContent = '';
+    } else if (stuck) {
+      el.classList.add('err');
+      txt.textContent = stuck + (stuck === 1 ? " change can't sync" : " changes can't sync");
+      act.textContent = 'Review';
     } else if (!navigator.onLine) {
       el.classList.add('off');
       txt.textContent = outbox.length
@@ -447,9 +1181,37 @@
     }
   }
 
+  // Replay queued ops onto the server's list, so anything logged while a sync was in
+  // flight survives the swap instead of being wiped by the response.
+  function applyOps(list, ops) {
+    var out = list.slice();
+    ops.forEach(function (op) {
+      if (op.type === 'add') {
+        var known = false;
+        for (var i = 0; i < out.length; i++) if (out[i].id === op.entry.id) { known = true; break; }
+        if (!known) {
+          out.push({ id: op.entry.id, date: op.entry.date, amount: op.entry.amount,
+                     category: op.entry.category, note: op.entry.note,
+                     loggedAt: op.entry.loggedAt, pending: true });
+        }
+      } else if (op.type === 'delete') {
+        out = out.filter(function (x) { return x.id !== op.id; });
+      }
+    });
+    return out;
+  }
+  function wireOp(o) {
+    // Exactly the shape Code.gs already expects — local bookkeeping stays on the phone.
+    return o.type === 'add' ? { type: 'add', entry: o.entry } : { type: 'delete', id: o.id };
+  }
+
   function sync(quiet) {
+    if (!vault.ready) return;
     if (syncing || !cfg.url || !cfg.secret) { paintStatus(); return; }
     if (!navigator.onLine) { paintStatus(); return; }
+
+    var sending = outbox.slice();
+    sending.forEach(function (o) { o.sent = true; });
     syncing = true; paintStatus();
 
     // text/plain keeps this a "simple" request, so the browser skips the CORS
@@ -457,28 +1219,52 @@
     fetch(cfg.url, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ secret: cfg.secret, ops: outbox })
+      body: JSON.stringify({ secret: cfg.secret, passcode: vault.pass, ops: sending.map(wireOp) })
     })
       .then(function (r) { return r.json(); })
       .then(function (data) {
+        if (data && !data.ok && String(data.error || '').indexOf('Bad passcode') > -1) {
+          // APP_PASSCODE was changed in the script. This device can still read its own
+          // store, but it is no longer allowed to sync, so ask for the new passcode.
+          sending.forEach(function (o) { o.sent = false; });
+          syncing = false;
+          passcodeRejected();
+          return;
+        }
         if (!data || !data.ok) throw new Error((data && data.error) || 'The Sheet refused the request.');
-        var sent = outbox.length;
-        outbox = [];
-        entries = (data.entries || []).map(function (e) { e.pending = false; return e; });
+        var done = {};
+        sending.forEach(function (o) { done[o.opId] = true; });
+        outbox = outbox.filter(function (o) { return !done[o.opId]; });
+
+        if (Object.prototype.toString.call(data.entries) === '[object Array]') {
+          var server = data.entries.map(function (e) { e.pending = false; return e; });
+          entries = applyOps(server, outbox);   // keeps anything queued mid-flight
+        }
         save();
         syncing = false;
         paintAll();
-        if (!quiet) toast(sent ? 'Synced ' + sent + (sent === 1 ? ' change' : ' changes') : 'Up to date');
+        if (!quiet) {
+          var n = sending.length;
+          toast(n ? 'Synced ' + n + (n === 1 ? ' change' : ' changes') : 'Up to date');
+        }
       })
       .catch(function (err) {
+        var msg = err.message || 'Could not reach your Sheet.';
+        sending.forEach(function (o) {
+          o.sent = false; o.tries = (o.tries || 0) + 1; o.error = msg;
+        });
+        save();
         syncing = false;
         paintStatus();
-        if (!quiet) toast(err.message || 'Could not reach your Sheet.', true);
+        if (!quiet) toast(msg, { bad: true });
       });
   }
 
-  function queue(op) {
-    outbox.push(op);
+  function queueOps(ops) {
+    ops.forEach(function (o) {
+      o.opId = uid(); o.tries = 0; o.sent = false;
+      outbox.push(o);
+    });
     save();
     paintStatus();
     sync(true);
@@ -487,6 +1273,21 @@
         .then(function (reg) { return reg.sync.register('ledger-sync'); })
         .catch(function () {});
     }
+  }
+  function queue(op) { queueOps([op]); }
+  function wireEntry(e) {
+    return { id: e.id, date: e.date, amount: e.amount,
+             category: e.category, note: e.note, loggedAt: e.loggedAt };
+  }
+  function labelOf(e) {
+    return rs(e.amount) + ' · ' + e.category + ' · ' + prettyDate(e.date);
+  }
+  function findOp(test) {
+    for (var i = 0; i < outbox.length; i++) if (test(outbox[i])) return i;
+    return -1;
+  }
+  function unsentAddFor(id) {
+    return findOp(function (o) { return o.type === 'add' && !o.sent && o.entry.id === id; });
   }
 
   // ── Amount ───────────────────────────────────────────────────────
@@ -525,27 +1326,228 @@
     entries.push(entry);           // shown instantly, network or not
     amount = ''; $('note').value = '';
     chosenDate = ymd(new Date());
-    queue({ type: 'add', entry: { id: entry.id, date: entry.date, amount: entry.amount,
-                                  category: entry.category, note: entry.note, loggedAt: entry.loggedAt } });
+    queue({ type: 'add', entry: wireEntry(entry), label: labelOf(entry) });
     paintAll(); buzz(22);
-    toast('Saved ' + rs(n) + ' · ' + entry.category);
+
+    var over = '';
+    var b = Number(cfg.budget) || 0;
+    if (b > 0 && entry.date.slice(0, 7) === V.monthKey) {
+      if (V.monthTotal > b) over = ' — ' + rs(V.monthTotal - b) + ' over budget';
+      else if (V.monthTotal / b >= 0.9) over = ' — ' + rs(b - V.monthTotal) + ' left this month';
+    }
+    toast('Saved ' + rs(n) + ' · ' + entry.category + over);
   }
 
+  // ── Editing ──────────────────────────────────────────────────────
+  function openEdit(e) {
+    editing = e;
+    $('eErr').classList.add('hidden');
+    $('eAmount').value = String(e.amount);
+    $('eDate').value = e.date;
+    $('eDate').max = V.today;
+    $('eNote').value = e.note || '';
+    $('editNote').textContent = e.pending
+      ? "This one hasn't reached your Sheet yet, so the queued row is rewritten in place."
+      : 'The old row is removed from your Sheet and a corrected one is written.';
+    var box = $('eCats'); box.innerHTML = '';
+    CATEGORIES.forEach(function (c) {
+      var b = document.createElement('button');
+      b.innerHTML = svg(c.icon) + '<span></span>';
+      b.lastChild.textContent = c.name;
+      b.setAttribute('aria-pressed', c.name === e.category);
+      b.onclick = function () {
+        Array.prototype.forEach.call(box.children, function (x) {
+          x.setAttribute('aria-pressed', x === b);
+        });
+        buzz(8);
+      };
+      box.appendChild(b);
+    });
+    openSheet('editSheet');
+  }
+  function chosenEditCat() {
+    var box = $('eCats');
+    for (var i = 0; i < box.children.length; i++) {
+      if (box.children[i].getAttribute('aria-pressed') === 'true') {
+        return box.children[i].lastChild.textContent;
+      }
+    }
+    return CATEGORIES[0].name;
+  }
+  function saveEdit() {
+    var e = editing;
+    if (!e) return;
+    var n = parseFloat($('eAmount').value.replace(/[^0-9.]/g, ''));
+    var date = $('eDate').value;
+    var err = $('eErr');
+    err.classList.add('hidden');
+    if (!(n > 0)) { err.textContent = 'Enter an amount above zero.'; err.classList.remove('hidden'); return; }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date > V.today) {
+      err.textContent = 'Pick a date no later than today.'; err.classList.remove('hidden'); return;
+    }
+    var next = { amount: Math.round(n * 100) / 100, category: chosenEditCat(),
+                 date: date, note: $('eNote').value.trim() };
+
+    var idx = -1;
+    for (var i = 0; i < entries.length; i++) if (entries[i].id === e.id) { idx = i; break; }
+    if (idx < 0) { closeSheets(); return; }
+
+    var pending = unsentAddFor(e.id);
+    if (pending > -1) {
+      // Never left the phone: rewrite the queued row instead of churning the Sheet.
+      var op = outbox[pending];
+      op.entry.amount = next.amount; op.entry.category = next.category;
+      op.entry.date = next.date; op.entry.note = next.note;
+      op.label = labelOf(op.entry);
+      entries[idx].amount = next.amount; entries[idx].category = next.category;
+      entries[idx].date = next.date; entries[idx].note = next.note;
+      save();
+    } else {
+      // Already in the Sheet: a delete plus a fresh add, which needs no new Code.gs verb.
+      var fresh = { id: uid(), date: next.date, amount: next.amount, category: next.category,
+                    note: next.note, loggedAt: e.loggedAt || new Date().toISOString(),
+                    pending: true };
+      entries[idx] = fresh;
+      queueOps([{ type: 'delete', id: e.id, label: labelOf(e) },
+                { type: 'add', entry: wireEntry(fresh), label: labelOf(fresh) }]);
+    }
+    editing = null;
+    closeSheets();
+    paintAll();
+    buzz(18);
+    toast('Updated to ' + rs(next.amount) + ' · ' + next.category);
+  }
+
+  // ── Deleting ─────────────────────────────────────────────────────
+  function askRemove(e) {
+    // Unsynced rows are cheap to undo, so skip the confirmation and offer Undo instead.
+    if (e.pending || !cfg.url || !cfg.secret) { removeWithUndo(e); return; }
+    pendingDelete = e;
+    $('delIcon').innerHTML = svg(iconFor(e.category));
+    $('delCat').textContent = e.category;
+    var clock = clockOf(e.loggedAt);
+    $('delMeta').textContent = dayHeading(e.date) + (clock ? ' · ' + clock : '') +
+                               (e.note ? ' · ' + e.note : '');
+    $('delAmt').textContent = rs(e.amount);
+    $('delNote').textContent = "This removes it from your Sheet too. It can't be undone " +
+      'once the change reaches the Sheet.';
+    buzz(8);
+    openSheet('delSheet');
+  }
+  function removeWithUndo(e) {
+    removeEntry(e);
+    buzz(18);
+    toast('Deleted ' + rs(e.amount) + ' · ' + e.category, {
+      ms: 6500,
+      action: { label: 'Undo', fn: function () { undoRemove(e); } }
+    });
+  }
   function removeEntry(e) {
-    if (!confirm('Delete this ' + rs(e.amount) + ' ' + e.category.toLowerCase() +
-                 ' expense from ' + prettyDate(e.date) + '?')) return;
     entries = entries.filter(function (x) { return x.id !== e.id; });
 
     // If it was never sent, just drop the queued write instead of queuing a delete.
-    var pendingAdd = -1;
-    for (var i = 0; i < outbox.length; i++) {
-      if (outbox[i].type === 'add' && outbox[i].entry.id === e.id) { pendingAdd = i; break; }
-    }
-    if (pendingAdd > -1) { outbox.splice(pendingAdd, 1); save(); paintAll(); paintStatus(); }
-    else queue({ type: 'delete', id: e.id });
+    var i = unsentAddFor(e.id);
+    if (i > -1) { outbox.splice(i, 1); save(); paintStatus(); }
+    else queue({ type: 'delete', id: e.id, label: labelOf(e) });
 
     paintAll();
-    toast('Expense deleted');
+  }
+  function undoRemove(e) {
+    var d = findOp(function (o) { return o.type === 'delete' && o.id === e.id; });
+    if (d > -1 && !outbox[d].sent) {
+      outbox.splice(d, 1);          // the delete never went out — forget it
+    } else {
+      // The Sheet already dropped it (or is dropping it), so write it back.
+      e.pending = true;
+      queue({ type: 'add', entry: wireEntry(e), label: labelOf(e) });
+    }
+    var known = false;
+    for (var i = 0; i < entries.length; i++) if (entries[i].id === e.id) { known = true; break; }
+    if (!known) entries.push(e);
+    save();
+    paintAll();
+    toast('Restored ' + rs(e.amount) + ' · ' + e.category);
+  }
+
+  // ── Budget ───────────────────────────────────────────────────────
+  function paintBudget() {
+    var b = Number(cfg.budget) || 0, el = $('budget');
+    el.classList.toggle('off', !(b > 0));
+    if (!(b > 0)) {
+      $('bLabel').textContent = 'Set a monthly budget';
+      $('bRight').textContent = '';
+      return;
+    }
+    var used = V.monthTotal;
+    var pace = V.dayOfMonth ? Math.round(used / V.dayOfMonth * V.dim) : used;
+    $('bLabel').textContent = used > b
+      ? rs(used - b) + ' over ' + rs(b)
+      : rs(b - used) + ' left of ' + rs(b);
+    $('bRight').textContent = 'on pace for ' + rs(pace);
+    var f = $('bFill');
+    f.style.width = Math.min(100, (used / b) * 100).toFixed(1) + '%';
+    f.className = 'bfill' + (used > b ? ' over' : (used / b >= 0.75 ? ' warn' : ''));
+  }
+  function openBudget() {
+    var b = Number(cfg.budget) || 0;
+    $('budInput').value = b > 0 ? String(b) : '';
+    openSheet('budSheet');
+  }
+  function saveBudget() {
+    var raw = $('budInput').value.replace(/[^0-9.]/g, '');
+    var n = parseFloat(raw);
+    cfg.budget = n > 0 ? Math.round(n) : 0;
+    save();
+    closeSheets();
+    paintAll();
+    toast(cfg.budget ? 'Budget set to ' + rs(cfg.budget) + ' a month' : 'Budget turned off');
+  }
+
+  // ── Sync queue ───────────────────────────────────────────────────
+  function opText(op) {
+    if (op.label) return (op.type === 'add' ? 'Add ' : 'Remove ') + op.label;
+    return op.type === 'add' ? 'Add an expense' : 'Remove an expense';
+  }
+  function paintQueue() {
+    var box = $('queueList'); box.innerHTML = '';
+    if (!outbox.length) {
+      box.innerHTML = '<div class="empty"><b>Nothing waiting</b>Every change has reached your Sheet.</div>';
+      $('queueRetry').classList.add('hidden');
+      return;
+    }
+    $('queueRetry').classList.remove('hidden');
+    outbox.forEach(function (op) {
+      var row = document.createElement('div'); row.className = 'qrow';
+      row.innerHTML = '<div class="mid"><div class="t1"></div><div class="t2"></div></div>' +
+                      '<button class="drop">Discard</button>';
+      row.querySelector('.t1').textContent = opText(op);
+      var t2 = row.querySelector('.t2');
+      var tries = op.tries || 0;
+      if (tries >= STUCK_AFTER) {
+        t2.className = 't2 bad';
+        t2.textContent = 'Failed ' + tries + ' times · ' + (op.error || 'unknown error');
+      } else if (tries) {
+        t2.textContent = 'Retrying · last error: ' + (op.error || 'unknown');
+      } else {
+        t2.textContent = 'Waiting to send';
+      }
+      row.querySelector('.drop').onclick = function () { discardOp(op); };
+      box.appendChild(row);
+    });
+  }
+  function discardOp(op) {
+    var i = findOp(function (o) { return o.opId === op.opId; });
+    if (i < 0) return;
+    outbox.splice(i, 1);
+    // An add that never landed leaves a row the Sheet will never know about, so the
+    // local copy goes with it — otherwise it lingers as a permanent "NOT SYNCED" ghost.
+    if (op.type === 'add') {
+      entries = entries.filter(function (x) { return x.id !== op.entry.id; });
+    }
+    save();
+    paintAll();
+    paintQueue();
+    toast('Discarded · ' + opText(op));
   }
 
   // ── Painting ─────────────────────────────────────────────────────
@@ -556,6 +1558,7 @@
     $('sToday').textContent = rs(V.todayTotal);
     $('sAvg').textContent = rs(Math.round(V.dailyAverage || 0));
     $('sCount').textContent = V.monthCount;
+    paintBudget();
   }
   function paintCats() {
     var box = $('cats'); box.innerHTML = '';
@@ -563,8 +1566,7 @@
       var b = document.createElement('button');
       b.className = 'cat';
       b.setAttribute('aria-pressed', c.name === category ? 'true' : 'false');
-      b.innerHTML = '<span class="ic"></span><span class="nm"></span>';
-      b.querySelector('.ic').textContent = c.icon;
+      b.innerHTML = '<span class="ic">' + svg(c.icon) + '</span><span class="nm"></span>';
       b.querySelector('.nm').textContent = c.name;
       b.onclick = function () { category = c.name; buzz(8); paintCats(); };
       box.appendChild(b);
@@ -575,21 +1577,90 @@
     $('dToday').setAttribute('aria-pressed', isT);
     $('dYest').setAttribute('aria-pressed', isY);
     $('dPick').setAttribute('aria-pressed', !isT && !isY);
-    $('dPick').textContent = (!isT && !isY && chosenDate) ? '📅 ' + prettyDate(chosenDate) : '📅 Pick date';
+    $('dPick').innerHTML = svg('calendar') + '<span class="lb"></span>';
+    $('dPick').querySelector('.lb').textContent =
+      (!isT && !isY && chosenDate) ? prettyDate(chosenDate) : 'Pick date';
   }
   function dayHeading(iso) {
     if (iso === V.today) return 'Today · ' + prettyDate(iso);
     if (iso === V.yesterday) return 'Yesterday · ' + prettyDate(iso);
     return prettyDate(iso);
   }
+
+  function inPeriod(e) {
+    if (filter.period === 'month') return e.date.slice(0, 7) === V.monthKey;
+    if (filter.period === 'last') return e.date.slice(0, 7) === V.lastMonthKey;
+    if (filter.period === '7d') return e.date >= V.weekStart && e.date <= V.today;
+    return true;
+  }
+  function filtered() {
+    var q = filter.text.trim().toLowerCase();
+    return V.all.filter(function (e) {
+      if (!inPeriod(e)) return false;
+      if (filter.category !== 'all' && e.category !== filter.category) return false;
+      if (q && (e.category + ' ' + (e.note || '')).toLowerCase().indexOf(q) === -1) return false;
+      return true;
+    });
+  }
+  function isDefaultFilter() {
+    return filter.period === 'month' && filter.category === 'all' && !filter.text.trim();
+  }
+  function paintFilters(rows) {
+    var seg = $('periodSeg');
+    if (!seg.children.length) {
+      PERIODS.forEach(function (p) {
+        var b = document.createElement('button');
+        b.textContent = p.label;
+        b.dataset.p = p.key;
+        b.onclick = function () { filter.period = p.key; buzz(8); save(); paintList(); };
+        seg.appendChild(b);
+      });
+    }
+    Array.prototype.forEach.call(seg.children, function (b) {
+      b.setAttribute('aria-pressed', b.dataset.p === filter.period);
+    });
+
+    var used = {};
+    V.all.forEach(function (e) { used[e.category] = true; });
+    var names = CATEGORIES.map(function (c) { return c.name; })
+      .filter(function (n) { return used[n] || n === filter.category; });
+    var chips = $('catChips'); chips.innerHTML = '';
+    [{ name: 'all' }].concat(names.map(function (n) { return { name: n }; })).forEach(function (c) {
+      var b = document.createElement('button');
+      if (c.name === 'all') b.textContent = 'All';
+      else {
+        b.innerHTML = svg(iconFor(c.name)) + '<span></span>';
+        b.lastChild.textContent = c.name;
+      }
+      b.setAttribute('aria-pressed', c.name === filter.category);
+      b.onclick = function () { filter.category = c.name; buzz(8); save(); paintList(); };
+      chips.appendChild(b);
+    });
+
+    var total = rows.reduce(function (a, e) { return a + e.amount; }, 0);
+    $('fCount').textContent = rows.length
+      ? rows.length + (rows.length === 1 ? ' expense · ' : ' expenses · ') + rs(total)
+      : 'Nothing matches';
+    $('fClear').classList.toggle('hidden', isDefaultFilter());
+    if ($('search').value !== filter.text) $('search').value = filter.text;
+  }
   function paintList() {
     var box = $('list'); box.innerHTML = '';
-    if (!V.recent.length) {
+    if (!V.all.length) {
+      paintFilters([]);
+      $('fCount').textContent = '';
       box.innerHTML = '<div class="empty"><b>No expenses yet</b>Tap the Add tab to record your first one.</div>';
       return;
     }
+    var rows = filtered();
+    paintFilters(rows);
+    if (!rows.length) {
+      box.innerHTML = '<div class="empty"><b>No matching expenses</b>' +
+        'Try a wider period or clear the filters.</div>';
+      return;
+    }
     var groups = [];
-    V.recent.forEach(function (e) {
+    rows.slice(0, 300).forEach(function (e) {
       var g = groups[groups.length - 1];
       if (!g || g.date !== e.date) groups.push({ date: e.date, items: [e] }); else g.items.push(e);
     });
@@ -604,10 +1675,11 @@
       var items = document.createElement('div'); items.className = 'items';
       g.items.forEach(function (e) {
         var row = document.createElement('div'); row.className = 'item';
-        row.innerHTML = '<div class="ic"></div><div class="mid"><div class="t1"></div>' +
-          '<div class="t2"></div></div><div class="amt tnum"></div>' +
-          '<button class="del" aria-label="Delete this expense">✕</button>';
-        row.querySelector('.ic').textContent = iconFor(e.category);
+        row.innerHTML = '<button class="open"><span class="ic"></span>' +
+          '<span class="mid"><span class="t1"></span><span class="t2"></span></span>' +
+          '<span class="amt tnum"></span></button>' +
+          '<button class="del" aria-label="Delete this expense">' + svg('close') + '</button>';
+        row.querySelector('.ic').innerHTML = svg(iconFor(e.category));
         var t1 = row.querySelector('.t1');
         t1.textContent = e.category;
         if (e.pending) {
@@ -618,12 +1690,16 @@
         var clock = clockOf(e.loggedAt);
         row.querySelector('.t2').textContent = e.note ? (clock ? clock + ' · ' : '') + e.note : clock;
         row.querySelector('.amt').textContent = rs(e.amount);
-        row.querySelector('.del').onclick = function () { removeEntry(e); };
+        row.querySelector('.open').setAttribute('aria-label',
+          'Edit ' + rs(e.amount) + ' ' + e.category + ' on ' + prettyDate(e.date));
+        row.querySelector('.open').onclick = function () { openEdit(e); };
+        row.querySelector('.del').onclick = function () { askRemove(e); };
         items.appendChild(row);
       });
       wrap.appendChild(items); box.appendChild(wrap);
     });
   }
+
   function trendSVG() {
     var t = V.trend, W = 320, H = 130, padL = 18, padR = 18, padT = 14, padB = 26;
     var max = Math.max.apply(null, t.map(function (m) { return m.amount; })) || 1;
@@ -652,15 +1728,22 @@
       dots + labels + '</svg>';
   }
   function paintCharts() {
+    if (!insightsMonth) insightsMonth = V.monthKey;
+    if (insightsMonth > V.monthKey) insightsMonth = V.monthKey;
+    var M = monthStats(insightsMonth);
+    $('mTitle').textContent = M.label + (M.count ? ' · ' + rs(M.total) : '');
+    $('mNext').disabled = insightsMonth >= V.monthKey;
+    $('mPrev').disabled = insightsMonth <= V.earliestMonth;
+
     var box = $('charts'); box.innerHTML = '';
     if (!entries.length) {
       box.innerHTML = '<div class="empty"><b>Nothing to chart yet</b>' +
         'Save a few expenses and your spending patterns will show up here.</div>';
       return;
     }
-    var maxDay = Math.max.apply(null, V.daily.map(function (d) { return d.amount; })) || 1;
-    var busiest = V.daily.slice().sort(function (a, b) { return b.amount - a.amount; })[0];
-    var bars = V.daily.map(function (d) {
+    var maxDay = Math.max.apply(null, M.daily.map(function (d) { return d.amount; })) || 1;
+    var busiest = M.daily.slice().sort(function (a, b) { return b.amount - a.amount; })[0];
+    var bars = M.daily.map(function (d) {
       var h = d.amount ? Math.max(4, (d.amount / maxDay) * 100) : 2;
       return '<div class="b' + (d.isToday ? ' on' : '') + (d.amount ? '' : ' zero') +
              '" style="height:' + h.toFixed(1) + '%" title="' + d.day + ' — ' + rs(d.amount) + '"></div>';
@@ -668,10 +1751,10 @@
     var c1 = document.createElement('div'); c1.className = 'card';
     c1.innerHTML = '<h3>Day by day</h3><p class="sub">' +
       (busiest && busiest.amount
-        ? 'Highest was ' + rs(busiest.amount) + ' on ' + busiest.day + ' ' + V.monthLabel.split(' ')[0]
-        : 'No spending recorded this month yet') +
+        ? 'Highest was ' + rs(busiest.amount) + ' on ' + busiest.day + ' ' + M.shortLabel
+        : 'Nothing recorded in ' + M.label) +
       '</p><div class="bars">' + bars + '</div><div class="axis"><span>1</span><span>' +
-      Math.ceil(V.daily.length / 2) + '</span><span>' + V.daily.length + '</span></div>';
+      Math.ceil(M.daily.length / 2) + '</span><span>' + M.daily.length + '</span></div>';
     box.appendChild(c1);
 
     var prev = V.trend[V.trend.length - 2];
@@ -679,39 +1762,76 @@
     var c2 = document.createElement('div'); c2.className = 'card';
     c2.innerHTML = '<h3>Last 6 months</h3><p class="sub">' +
       (diff === null ? 'Your monthly totals'
-        : diff >= 0 ? 'Up ' + diff + '% from ' + prev.label
-        : 'Down ' + Math.abs(diff) + '% from ' + prev.label) + '</p>' + trendSVG();
+        : diff >= 0 ? 'This month is up ' + diff + '% from ' + prev.label
+        : 'This month is down ' + Math.abs(diff) + '% from ' + prev.label) + '</p>' + trendSVG();
     box.appendChild(c2);
 
-    if (V.breakdown.length) {
-      var maxCat = V.breakdown[0].amount || 1;
-      var rows = V.breakdown.map(function (b) {
-        return '<div class="catrow"><div class="top"><span>' + iconFor(b.category) +
+    if (M.breakdown.length) {
+      var maxCat = M.breakdown[0].amount || 1;
+      var rows = M.breakdown.map(function (b) {
+        return '<div class="catrow"><div class="top"><span class="ci">' + svg(iconFor(b.category)) +
           '</span><span class="nm">' + b.category + '</span><span class="pc">' + b.share +
           '%</span><span class="am tnum">' + rs(b.amount) + '</span></div>' +
           '<div class="track"><div class="fill" style="width:' +
           Math.max(3, (b.amount / maxCat) * 100).toFixed(1) + '%"></div></div></div>';
       }).join('');
       var c3 = document.createElement('div'); c3.className = 'card';
-      c3.innerHTML = '<h3>Where it went</h3><p class="sub">' + V.monthLabel + ' · ' +
-        rs(V.monthTotal) + ' across ' + V.breakdown.length +
-        (V.breakdown.length === 1 ? ' category' : ' categories') + '</p>' + rows;
+      c3.innerHTML = '<h3>Where it went</h3><p class="sub">' + M.label + ' · ' +
+        rs(M.total) + ' across ' + M.breakdown.length +
+        (M.breakdown.length === 1 ? ' category' : ' categories') + '</p>' + rows;
       box.appendChild(c3);
     }
+  }
+  function paintSettings() {
+    var b = Number(cfg.budget) || 0;
+    $('sBudgetSub').textContent = b > 0 ? rs(b) + ' a month' : 'Not set';
+    $('sSheetSub').textContent = (cfg.url && cfg.secret) ? 'Connected' : 'Not connected';
+    var stuck = stuckOps().length;
+    $('sQueueSub').textContent = !outbox.length ? 'Everything is synced'
+      : stuck ? stuck + ' stuck · ' + outbox.length + ' waiting'
+      : outbox.length + ' waiting to send';
+    $('sQueue').classList.toggle('warn', stuck > 0);
+    $('sPassSub').textContent = vault.plain
+      ? 'Off — data is stored in plain text'
+      : (cfg.url && cfg.secret) ? 'Checked by your Sheet' : 'Local to this device';
   }
   function paintAll() {
     V = summarise();
     if (!chosenDate) chosenDate = V.today;
     paintHero(); paintCats(); paintDate(); paintList(); paintCharts();
-    paintAmount(); paintStatus();
+    paintAmount(); paintStatus(); paintSettings();
   }
 
   // ── Calendar ─────────────────────────────────────────────────────
-  function openSheet(id) { $('backdrop').classList.add('on'); $(id).classList.add('on'); }
+  var lastFocus = null, trapIn = null;
+  function focusables(el) {
+    return Array.prototype.filter.call(
+      el.querySelectorAll('button, input, [tabindex]:not([tabindex="-1"])'),
+      function (n) { return !n.disabled && n.offsetParent !== null; });
+  }
+  function openSheet(id) {
+    lastFocus = document.activeElement;
+    $('backdrop').classList.add('on');
+    $(id).classList.add('on');
+    trapIn = $(id);
+    var f = focusables(trapIn);
+    if (f.length) f[0].focus();
+    // Focus is inside the sheet now, so the rest can be hidden from assistive tech.
+    document.querySelector('.app').setAttribute('aria-hidden', 'true');
+    document.querySelector('.tabbar').setAttribute('aria-hidden', 'true');
+  }
   function closeSheets() {
     $('backdrop').classList.remove('on');
-    $('calSheet').classList.remove('on');
-    $('cfgSheet').classList.remove('on');
+    Array.prototype.forEach.call(document.querySelectorAll('.sheet'), function (s) {
+      s.classList.remove('on');
+    });
+    pendingDelete = null; editing = null; trapIn = null;
+    document.querySelector('.app').removeAttribute('aria-hidden');
+    document.querySelector('.tabbar').removeAttribute('aria-hidden');
+    if (lastFocus && lastFocus.focus && document.contains(lastFocus)) {
+      try { lastFocus.focus(); } catch (e) {}
+    }
+    lastFocus = null;
   }
   function openCal() {
     var p = (chosenDate || V.today).split('-');
@@ -721,7 +1841,7 @@
   function paintCal() {
     $('calTitle').textContent = MONTHS[calM] + ' ' + calY;
     var first = new Date(calY, calM, 1).getDay();
-    var days = new Date(calY, calM + 1, 0).getDate();
+    var days = daysIn(calY, calM);
     var grid = $('calGrid'); grid.innerHTML = '';
     for (var i = 0; i < first; i++) {
       var pad = document.createElement('button');
@@ -741,8 +1861,29 @@
     }
     $('calNext').disabled = (calY + '-' + (calM < 9 ? '0' : '') + (calM + 1)) >= V.today.slice(0, 7);
   }
+  function shiftInsights(step) {
+    var y = Number(insightsMonth.slice(0, 4)), m = Number(insightsMonth.slice(5, 7)) - 1 + step;
+    insightsMonth = ymd(new Date(y, m, 1)).slice(0, 7);
+    buzz(8);
+    paintCharts();
+  }
 
   // ── Wiring ───────────────────────────────────────────────────────
+  $('lockGo').addEventListener('click', handleLockGo);
+  $('lockSkip').addEventListener('click', continueUnprotected);
+  $('lockAlt').addEventListener('click', function () {
+    if (lockMode === 'first') setupWithoutSheet(); else startOver();
+  });
+  $('lockReveal').addEventListener('click', function () {
+    revealPass($('lockPass').type === 'password');
+    $('lockPass').focus();
+  });
+  [$('lockPass'), $('lockUrl'), $('lockSecret')].forEach(function (el) {
+    el.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); handleLockGo(); }
+    });
+  });
+
   document.querySelectorAll('.key').forEach(function (b) {
     b.addEventListener('click', function () { press(b.dataset.k); });
   });
@@ -750,23 +1891,61 @@
   $('dToday').addEventListener('click', function () { chosenDate = V.today; buzz(8); paintDate(); });
   $('dYest').addEventListener('click', function () { chosenDate = V.yesterday; buzz(8); paintDate(); });
   $('dPick').addEventListener('click', openCal);
+
+  $('search').addEventListener('input', function () { filter.text = this.value; save(); paintList(); });
+  $('fClear').addEventListener('click', function () {
+    filter.period = 'month'; filter.category = 'all'; filter.text = '';
+    $('search').value = ''; buzz(8); save(); paintList();
+  });
+
+  $('mPrev').addEventListener('click', function () { shiftInsights(-1); });
+  $('mNext').addEventListener('click', function () { shiftInsights(1); });
+
   $('calClose').addEventListener('click', closeSheets);
   $('cfgClose').addEventListener('click', closeSheets);
+  $('delCancel').addEventListener('click', closeSheets);
+  $('eCancel').addEventListener('click', closeSheets);
+  $('setClose').addEventListener('click', closeSheets);
+  $('budClose').addEventListener('click', closeSheets);
+  $('queueClose').addEventListener('click', closeSheets);
+  $('pClose').addEventListener('click', closeSheets);
   $('backdrop').addEventListener('click', closeSheets);
+  $('delConfirm').addEventListener('click', function () {
+    var e = pendingDelete;
+    closeSheets();
+    if (e) { buzz(22); removeEntry(e); toast('Expense deleted'); }
+  });
+  $('eSave').addEventListener('click', saveEdit);
   $('calPrev').addEventListener('click', function () { calM--; if (calM < 0) { calM = 11; calY--; } paintCal(); });
   $('calNext').addEventListener('click', function () { calM++; if (calM > 11) { calM = 0; calY++; } paintCal(); });
 
+  function openCfg() {
+    $('cfgUrl').value = cfg.url; $('cfgSecret').value = cfg.secret;
+    openSheet('cfgSheet');
+  }
   $('status').addEventListener('click', function () {
-    if (!cfg.url || !cfg.secret) {
-      $('cfgUrl').value = cfg.url; $('cfgSecret').value = cfg.secret;
-      openSheet('cfgSheet');
-    } else sync(false);
+    if (updateReady) { location.reload(); return; }
+    if (!cfg.url || !cfg.secret) openCfg();
+    else if (stuckOps().length) { paintQueue(); openSheet('queueSheet'); }
+    else sync(false);
   });
   $('cfgSave').addEventListener('click', function () {
     cfg.url = $('cfgUrl').value.trim();
     cfg.secret = $('cfgSecret').value.trim();
-    save(); closeSheets(); paintStatus(); sync(false);
+    save(); closeSheets(); paintAll(); sync(false);
   });
+  $('gear').addEventListener('click', function () { paintSettings(); openSheet('setSheet'); });
+  $('sBudget').addEventListener('click', function () { closeSheets(); openBudget(); });
+  $('sSheet').addEventListener('click', function () { closeSheets(); openCfg(); });
+  $('sQueue').addEventListener('click', function () { closeSheets(); paintQueue(); openSheet('queueSheet'); });
+  $('sPass').addEventListener('click', function () { closeSheets(); openSheet('passSheet'); });
+  $('sLock').addEventListener('click', lockNow);
+  $('budSave').addEventListener('click', saveBudget);
+  $('queueRetry').addEventListener('click', function () {
+    outbox.forEach(function (o) { o.tries = 0; o.error = ''; });
+    save(); paintQueue(); paintStatus(); sync(false);
+  });
+  $('budget').addEventListener('click', openBudget);
 
   function show(which) {
     ['add', 'history', 'charts'].forEach(function (v) {
@@ -781,30 +1960,54 @@
   $('t-charts').addEventListener('click', function () { show('charts'); });
 
   document.addEventListener('keydown', function (e) {
+    if (!vault.ready) return;
+    if (trapIn && e.key === 'Tab') {          // keep tabbing inside the open sheet
+      var f = focusables(trapIn);
+      if (!f.length) return;
+      var first = f[0], last = f[f.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      return;
+    }
     if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
+    if ($('backdrop').classList.contains('on')) {          // a sheet owns the keyboard
+      if (e.key === 'Escape') closeSheets();
+      else if (e.key === 'Enter' && pendingDelete) $('delConfirm').click();
+      return;
+    }
     if (/^[0-9.]$/.test(e.key)) press(e.key);
     else if (e.key === 'Backspace') press('del');
     else if (e.key === 'Enter') saveExpense();
     else if (e.key === 'Escape') closeSheets();
   });
 
-  window.addEventListener('online', function () { paintStatus(); sync(true); });
-  window.addEventListener('offline', paintStatus);
+  window.addEventListener('online', function () { if (vault.ready) { paintStatus(); sync(true); } });
+  window.addEventListener('offline', function () { if (vault.ready) paintStatus(); });
   document.addEventListener('visibilitychange', function () {
-    if (!document.hidden) { paintAll(); sync(true); }
+    if (document.hidden) { hiddenAt = Date.now(); return; }
+    if (!vault.ready) return;
+    if (!vault.plain && hiddenAt && Date.now() - hiddenAt > AUTOLOCK_MS) { lockNow(); return; }
+    paintAll(); sync(true);
   });
+
   if ('serviceWorker' in navigator) {
+    var hadController = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.register('./sw.js').catch(function () {});
     navigator.serviceWorker.addEventListener('message', function (e) {
       if (e.data && e.data.type === 'sync-now') sync(true);
     });
+    // A newer worker taking over an already-loaded page means the shell on screen is
+    // stale — offer a reload rather than yanking the page out from under a half-typed amount.
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (hadController) { updateReady = true; paintStatus(); }
+    });
   }
 
   // ── Start ────────────────────────────────────────────────────────
-  load();
-  show('add');
-  paintAll();
-  sync(true);
+  document.querySelectorAll('[data-icon]').forEach(function (el) {
+    el.innerHTML = svg(el.dataset.icon);
+  });
+  boot();
 })();
 </script>
 </body>
