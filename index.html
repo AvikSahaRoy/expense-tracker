@@ -197,6 +197,15 @@
   .fmeta { display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
            font-size: 12px; color: var(--muted); margin: 10px 4px 0; }
   .fmeta button { font-size: 12px; font-weight: 600; color: var(--brand); }
+  /* Says what the phone is and isn't holding when a filter reaches past the
+     offline window, so an incomplete list never looks like a complete one. */
+  .archnote { display: flex; justify-content: space-between; align-items: center; gap: 10px;
+              margin: 8px 4px 0; padding: 8px 11px; border-radius: 11px;
+              background: var(--soft); color: var(--brand);
+              font-size: 12px; line-height: 1.45; }
+  .archnote.warn { background: rgba(217, 119, 6, .1); color: var(--amber); }
+  .archnote button { flex: none; font-size: 12px; font-weight: 600; color: inherit;
+                     text-decoration: underline; }
 
   /* History */
   .daygroup { margin-bottom: 16px; }
@@ -221,6 +230,10 @@
   .item .del:active { background: var(--soft); color: var(--danger); }
   .pill { font-size: 10px; font-weight: 600; color: var(--amber); border: 1px solid var(--amber);
           border-radius: 5px; padding: 0 4px; margin-left: 6px; vertical-align: 1px; }
+  /* Fetched from the Sheet rather than held on the phone — quieter than the
+     amber "not synced" pill, because nothing is wrong with these. */
+  .pill.arch { color: var(--muted); border-color: var(--line); }
+  .bigtotal { font-size: 30px; font-weight: 700; color: var(--ink); margin-top: 6px; }
 
   /* Cards + charts */
   .card { background: var(--surface); border-radius: 18px; padding: 16px;
@@ -442,6 +455,10 @@
       <div class="fmeta">
         <span id="fCount"></span>
         <button id="fClear" class="hidden">Clear filters</button>
+      </div>
+      <div id="archNote" class="archnote hidden" role="status" aria-live="polite">
+        <span id="archText"></span>
+        <button id="archAct" class="hidden" type="button"></button>
       </div>
     </div>
     <div id="list"></div>
@@ -717,7 +734,13 @@
   var AUTOLOCK_MS = 120000;   // re-ask for the passcode after 2 minutes in the background
   var PBKDF2_ITER = 210000;
 
-  var entries = [];     // every expense known to this phone
+  // The phone holds a rolling window of rows, not the whole ledger — see the
+  // "Windowed history" note further down. `totals` carries one number per month
+  // for everything older, which is what keeps the trend and the month pager
+  // working across years the device has no rows for.
+  var entries = [];     // every expense inside the window
+  var totals = {};      // 'YYYY-MM' -> amount, every month the Sheet knows about
+  var windowStart = ''; // oldest date `entries` is complete for ('' = holds everything)
   var outbox = [];      // changes not yet written to the Sheet
   var cfg = { url: '', secret: '', budget: 0 };
   var filter = { period: 'month', category: 'all', text: '', from: '', to: '' };
@@ -727,6 +750,15 @@
   var calTarget = 'add', editDate = '';
   var lockMode = 'unlock', hiddenAt = 0;
   var V = null;
+
+  // ── Windowed history ─────────────────────────────────────────────
+  // Anything the current filter needs from before `windowStart` is fetched from
+  // the Sheet on demand and kept only for as long as the app is open. `archive`
+  // is the answer to the History filter; `archMonths` is the same idea for the
+  // Insights pager, which asks one whole month at a time.
+  var archive = { key: '', state: 'idle', entries: [], matched: 0, total: 0, truncated: false };
+  var archMonths = {};      // 'YYYY-MM' -> { state, entries }
+  var archTimer = null;     // debounce, so typing in the search box isn't a request per key
 
   function $(id) { return document.getElementById(id); }
 
@@ -774,22 +806,33 @@
           .then(function (key) { return { key: key, verifier: all.slice(32, 48) }; });
       });
   }
+  // v2 keeps iv and ciphertext as bytes, which IndexedDB stores directly. v1 kept
+  // them base64'd because localStorage only holds strings; those boxes are still
+  // readable so an upgrading device opens on the first try.
   function encryptSnapshot(key) {
     var iv = randBytes(12);
     var body = new TextEncoder().encode(JSON.stringify(snapshot()));
     return SUB.encrypt({ name: 'AES-GCM', iv: iv }, key, body)
-      .then(function (ct) { return { v: 1, iv: b64(iv), ct: b64(ct) }; });
+      .then(function (ct) { return { v: 2, iv: iv, ct: new Uint8Array(ct) }; });
   }
+  function bytesOf(v) { return typeof v === 'string' ? unb64(v) : new Uint8Array(v); }
   function decryptVault(key, box) {
-    return SUB.decrypt({ name: 'AES-GCM', iv: unb64(box.iv) }, key, unb64(box.ct))
+    return SUB.decrypt({ name: 'AES-GCM', iv: bytesOf(box.iv) }, key, bytesOf(box.ct))
       .then(function (pt) { return JSON.parse(new TextDecoder().decode(pt)); });
   }
   function snapshot() {
-    return { entries: entries, outbox: outbox, cfg: cfg, filter: filter };
+    return { entries: entries, totals: totals, windowStart: windowStart,
+             outbox: outbox, cfg: cfg, filter: filter };
   }
   function adopt(data) {
     entries = (data && data.entries) || [];
+    totals = (data && data.totals) || {};
+    windowStart = (data && data.windowStart) || '';
     outbox = (data && data.outbox) || [];
+    // A device upgrading from a build that stored the whole ledger arrives with
+    // years of rows. Fold the old ones into `totals` and drop them, so this
+    // phone starts behaving like a windowed one straight away.
+    if (windowStart) pruneToWindow();
     if (data && data.cfg) {
       cfg.url = data.cfg.url || ''; cfg.secret = data.cfg.secret || '';
       cfg.budget = Number(data.cfg.budget) || 0;
@@ -806,6 +849,35 @@
       if (!o.opId) o.opId = uid();
     });
   }
+  /**
+   * Drops rows the Sheet no longer sends, keeping their spend in `totals` so no
+   * chart or month total quietly changes when a row leaves the window. Anything
+   * still queued stays put — an unsent expense must not vanish because it was
+   * backdated past the window.
+   */
+  function pruneToWindow() {
+    var keep = [], folded = {};
+    entries.forEach(function (e) {
+      if (e.pending || !e.date || e.date >= windowStart) { keep.push(e); return; }
+      var mk = e.date.slice(0, 7);
+      folded[mk] = (folded[mk] || 0) + e.amount;
+    });
+    if (keep.length === entries.length) return;
+    // Only for months the Sheet has not already accounted for — otherwise a
+    // month would be counted once here and once from the archive.
+    Object.keys(folded).forEach(function (mk) {
+      if (totals[mk] === undefined) totals[mk] = folded[mk];
+    });
+    entries = keep;
+  }
+  /** Month-level spend, wherever the number happens to live. */
+  function monthAmount(mk, byMonth) {
+    if (!windowStart || mk >= windowStart.slice(0, 7)) return byMonth[mk] || 0;
+    return totals[mk] || 0;
+  }
+  /** True when `mk` is a month the phone holds individual rows for. */
+  function inWindow(mk) { return !windowStart || mk >= windowStart.slice(0, 7); }
+
   function readJSON(k) {
     try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; }
   }
@@ -825,18 +897,24 @@
 
   // Writes are queued so two saves can't interleave, and each one captures the key it
   // started with — locking mid-write still finishes the write already in progress.
+  //
+  // The store is IndexedDB rather than localStorage. localStorage caps out around
+  // 5 MB and only holds strings, which forced the ciphertext through base64 and
+  // put a hard ceiling on how many rows a device could keep. IndexedDB has room
+  // to spare and takes the raw bytes, so a save is one encrypt and one put.
   function save() {
     if (!vault.ready) return;
     if (vault.plain) {
-      try { localStorage.setItem(K.vault, JSON.stringify({ v: 1, plain: true, data: snapshot() })); }
-      catch (e) { toast('This phone is out of storage space.', { bad: true }); }
+      writeChain = writeChain
+        .then(function () { return vaultWrite({ v: 2, plain: true, data: snapshot() }); })
+        .catch(function () { toast('Could not save on this phone.', { bad: true }); });
       return;
     }
     var key = vault.key;
     if (!key) return;
     writeChain = writeChain
       .then(function () { return encryptSnapshot(key); })
-      .then(function (box) { localStorage.setItem(K.vault, JSON.stringify(box)); })
+      .then(function (box) { return vaultWrite(box); })
       .catch(function () { toast('Could not save on this phone.', { bad: true }); });
   }
 
@@ -849,41 +927,90 @@
   // than sit in localStorage as text, it is wrapped with a key the browser will happily
   // use but never hand back (IndexedDB CryptoKey, extractable: false) — so no script and
   // no storage inspector can read the passcode itself out of this device.
-  var IDB_NAME = 'ledger-keys', IDB_STORE = 'k', REMEMBER_DEFAULT_DAYS = 30;
+  var IDB_NAME = 'ledger-keys', IDB_STORE = 'k', IDB_VAULT = 'vault';
+  var IDB_VERSION = 2, REMEMBER_DEFAULT_DAYS = 30;
 
   function idb() {
     return new Promise(function (res, rej) {
       if (!window.indexedDB) return rej(new Error('no indexeddb'));
-      var rq = indexedDB.open(IDB_NAME, 1);
-      rq.onupgradeneeded = function () { rq.result.createObjectStore(IDB_STORE); };
+      var rq = indexedDB.open(IDB_NAME, IDB_VERSION);
+      rq.onupgradeneeded = function () {
+        var db = rq.result;
+        if (!db.objectStoreNames.contains(IDB_STORE)) db.createObjectStore(IDB_STORE);
+        if (!db.objectStoreNames.contains(IDB_VAULT)) db.createObjectStore(IDB_VAULT);
+      };
       rq.onsuccess = function () { res(rq.result); };
       rq.onerror = function () { rej(rq.error); };
     });
   }
-  function idbGet(k) {
+  function idbGet(k, store) {
+    var name = store || IDB_STORE;
     return idb().then(function (db) {
       return new Promise(function (res, rej) {
-        var rq = db.transaction(IDB_STORE, 'readonly').objectStore(IDB_STORE).get(k);
+        var rq = db.transaction(name, 'readonly').objectStore(name).get(k);
         rq.onsuccess = function () { res(rq.result || null); };
         rq.onerror = function () { rej(rq.error); };
       });
     });
   }
-  function idbPut(k, v) {
+  function idbPut(k, v, store) {
+    var name = store || IDB_STORE;
     return idb().then(function (db) {
       return new Promise(function (res, rej) {
-        var tx = db.transaction(IDB_STORE, 'readwrite');
-        tx.objectStore(IDB_STORE).put(v, k);
+        var tx = db.transaction(name, 'readwrite');
+        tx.objectStore(name).put(v, k);
         tx.oncomplete = function () { res(true); };
         tx.onerror = function () { rej(tx.error); };
       });
     });
   }
-  function idbDel(k) {
+
+  // ── The vault, in IndexedDB ──────────────────────────────────────
+  // Reading it is asynchronous now, so everything that used to reach for it
+  // synchronously goes through `vaultBox` — a copy held from boot onwards.
+  var vaultBox = null;
+
+  function vaultLoad() {
+    return idbGet('box', IDB_VAULT)
+      .then(function (box) {
+        if (box) return box;
+        // A device coming from the localStorage build: move what is there
+        // across once, then stop looking.
+        var legacy = readJSON(K.vault);
+        if (!legacy) return null;
+        return vaultWrite(legacy).then(function () {
+          try { localStorage.removeItem(K.vault); } catch (e) {}
+          return legacy;
+        });
+      })
+      .catch(function () { return readJSON(K.vault); })   // no IndexedDB at all
+      .then(function (box) { vaultBox = box; return box; });
+  }
+  function vaultWrite(box) {
+    vaultBox = box;
+    return idbPut('box', box, IDB_VAULT).catch(function (err) {
+      // Private windows and a few locked-down browsers refuse IndexedDB. Fall
+      // back to localStorage, which still works for a window-sized ledger.
+      localStorage.setItem(K.vault, JSON.stringify(boxToJSON(box)));
+      return true;
+    });
+  }
+  function vaultClear() {
+    vaultBox = null;
+    try { localStorage.removeItem(K.vault); } catch (e) {}
+    return idbDel('box', IDB_VAULT).catch(function () { return true; });
+  }
+  /** The localStorage fallback only holds strings, so bytes go back to base64. */
+  function boxToJSON(box) {
+    if (!box || box.plain) return box;
+    return { v: 1, iv: b64(bytesOf(box.iv)), ct: b64(bytesOf(box.ct)) };
+  }
+  function idbDel(k, store) {
+    var name = store || IDB_STORE;
     return idb().then(function (db) {
       return new Promise(function (res) {
-        var tx = db.transaction(IDB_STORE, 'readwrite');
-        tx.objectStore(IDB_STORE).delete(k);
+        var tx = db.transaction(name, 'readwrite');
+        tx.objectStore(name).delete(k);
         tx.oncomplete = function () { res(true); };
         tx.onerror = function () { res(false); };
       });
@@ -942,7 +1069,7 @@
   // Reopens the ledger from what this device remembered. Resolves false if anything is
   // missing or stale — the caller then falls back to asking for the passcode.
   function resumeSession() {
-    var box = readJSON(K.vault);
+    var box = vaultBox;
     if (!box || box.plain) return Promise.resolve(false);
     return rememberedPass().then(function (pass) {
       if (!pass) return false;
@@ -1059,7 +1186,11 @@
     closeSheets();
     forgetUnlock();          // an explicit lock must really ask again
     vault.key = null; vault.pass = ''; vault.ready = false;
-    entries = []; outbox = []; cfg = { url: '', secret: '', budget: 0 };
+    entries = []; totals = {}; windowStart = ''; outbox = [];
+    cfg = { url: '', secret: '', budget: 0 };
+    // Archived rows were fetched with the passcode this device just gave up.
+    archive = { key: '', state: 'idle', entries: [], matched: 0, total: 0, truncated: false };
+    archMonths = {};
     amount = ''; pendingDelete = null; editing = null;
     $('list').innerHTML = ''; $('charts').innerHTML = '';
     showLock('unlock');
@@ -1115,6 +1246,7 @@
             adopt(legacyData());          // anything an older build left behind
             if (carried && carried.length) outbox = carried;
             cfg.url = url; cfg.secret = secret;
+            absorbWindow(data);
             if (Object.prototype.toString.call(data.entries) === '[object Array]') {
               var server = data.entries.map(function (e) { e.pending = false; return e; });
               entries = applyOps(server, outbox);   // unsent local changes stay visible
@@ -1125,8 +1257,11 @@
             save();
             rememberUnlock(pass);
             startApp();
+            // The count is the window, not the whole ledger — say so, or a Sheet
+            // with years in it looks like it arrived half empty.
             toast('Unlocked · ' + entries.length +
-                  (entries.length === 1 ? ' expense' : ' expenses') + ' from your Sheet');
+                  (entries.length === 1 ? ' expense' : ' expenses') +
+                  (windowStart ? ' since ' + prettyDate(windowStart) : ' from your Sheet'));
           });
         })
         .catch(function (err) {
@@ -1146,7 +1281,7 @@
     if (!pass) return lockError('Enter the passcode.');
     var salt = deviceSalt();
     derive(pass, salt, PBKDF2_ITER).then(function (d) {
-      var box = readJSON(K.vault);
+      var box = vaultBox;
       if (!box) { $('lockGo').disabled = false; showLock('first'); return; }
       if (box.plain) {
         vault.key = d.key; vault.salt = salt; vault.pass = pass;
@@ -1172,10 +1307,10 @@
   // way in: 'first' mode still has to satisfy APP_PASSCODE before anything opens.
   function startOver() {
     try {
-      localStorage.removeItem(K.vault);
       localStorage.removeItem(K.lock);
       localStorage.removeItem(K.dsalt);
     } catch (e) {}
+    vaultClear();
     adopt(null);
     vault.key = null; vault.pass = ''; vault.ready = false;
     showLock('first');
@@ -1196,7 +1331,7 @@
     }).catch(function () { lockError('Could not set up on this device.'); });
   }
   function continueUnprotected() {
-    var box = readJSON(K.vault);
+    var box = vaultBox;
     // An encrypted ledger already here must never be traded for an empty plaintext one.
     if (readJSON(K.lock) && box && !box.plain) {
       lockError('This phone already holds an encrypted ledger. It can only be opened with ' +
@@ -1212,20 +1347,23 @@
   }
   function boot() {
     if (!SUB) { showLock('nocrypto'); return; }
-    // Only an encrypted store can verify a passcode offline. Data left by an older
-    // build has no passcode attached to it, so that device goes through the Sheet
-    // once — the "Set up without a Sheet" link is the offline way out.
-    var box = readJSON(K.vault);
-    if (!box) { showLock('first'); return; }
-    if (box.plain) { showLock('unlock'); return; }
-    // Already signed in on this device: resume behind the splash so a refresh never
-    // shows the passcode screen. Only a failed resume falls back to asking.
-    if (!hasRemembered()) { showLock('unlock'); return; }
+    // The vault lives in IndexedDB, so this one read is asynchronous. The splash
+    // covers it — it is a single indexed get and lands in a few milliseconds.
     showSplash(true);
-    resumeSession().then(function (ok) {
-      if (ok) showSplash(false);
-      else showLock('unlock');
-    });
+    vaultLoad().then(function (box) {
+      // Only an encrypted store can verify a passcode offline. Data left by an older
+      // build has no passcode attached to it, so that device goes through the Sheet
+      // once — the "Set up without a Sheet" link is the offline way out.
+      if (!box) { showLock('first'); return; }
+      if (box.plain) { showLock('unlock'); return; }
+      // Already signed in on this device: resume behind the splash so a refresh never
+      // shows the passcode screen. Only a failed resume falls back to asking.
+      if (!hasRemembered()) { showLock('unlock'); return; }
+      return resumeSession().then(function (ok) {
+        if (ok) showSplash(false);
+        else showLock('unlock');
+      });
+    }).catch(function () { showLock('unlock'); });
   }
 
   // ── Helpers ──────────────────────────────────────────────────────
@@ -1299,7 +1437,7 @@
     for (var i = 5; i >= 0; i--) {
       var m = new Date(now.getFullYear(), now.getMonth() - i, 1);
       var mkey = ymd(m).slice(0, 7);
-      trend.push({ label: SHORT[m.getMonth()], amount: byMonth[mkey] || 0 });
+      trend.push({ label: SHORT[m.getMonth()], amount: monthAmount(mkey, byMonth) });
     }
 
     var sorted = entries.slice().sort(function (a, b) {
@@ -1307,12 +1445,17 @@
       return (a.loggedAt || '') < (b.loggedAt || '') ? 1 : -1;
     });
 
+    // How far back the month pager may go. `totals` reaches into the archives,
+    // so Insights can still walk through years this phone holds no rows for.
+    var earliest = sorted.length ? sorted[sorted.length - 1].date.slice(0, 7) : mk;
+    Object.keys(totals).forEach(function (k) { if (k < earliest) earliest = k; });
+
     return {
       today: today, yesterday: ymd(new Date(now.getTime() - 864e5)),
       monthKey: mk,
       lastMonthKey: ymd(new Date(now.getFullYear(), now.getMonth() - 1, 1)).slice(0, 7),
       weekStart: ymd(new Date(now.getTime() - 6 * 864e5)),
-      earliestMonth: sorted.length ? sorted[sorted.length - 1].date.slice(0, 7) : mk,
+      earliestMonth: earliest,
       all: sorted,
       todayLabel: now.toLocaleDateString('en-IN',
         { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }),
@@ -1325,15 +1468,34 @@
   }
 
   // Everything the Insights tab shows for one month, so it can look at any month.
+  //
+  // A month inside the window is computed from the rows on the phone. An older
+  // one has only its total here, so its rows are fetched once and cached for the
+  // session; until they land, `pending` tells the caller to show the total alone
+  // rather than a day-by-day chart that would read as an empty month.
   function monthStats(mk) {
     var y = Number(mk.slice(0, 4)), m = Number(mk.slice(5, 7)) - 1;
     var byCat = {}, byDay = {}, total = 0, count = 0;
-    entries.forEach(function (e) {
+    var source = entries, pending = false, failed = false;
+
+    if (!inWindow(mk)) {
+      var got = archMonths[mk];
+      if (got && got.state === 'ready') source = got.entries;
+      else {
+        source = [];
+        pending = !got || got.state === 'loading';
+        failed = !!got && got.state === 'error';
+        fetchArchiveMonth(mk);
+      }
+    }
+
+    source.forEach(function (e) {
       if (e.date.slice(0, 7) !== mk) return;
       total += e.amount; count++;
       byCat[e.category] = (byCat[e.category] || 0) + e.amount;
       byDay[e.date] = (byDay[e.date] || 0) + e.amount;
     });
+    if (source !== entries && !count) total = totals[mk] || 0;
     var dim = daysIn(y, m), daily = [];
     for (var d = 1; d <= dim; d++) {
       var key = mk + '-' + (d < 10 ? '0' + d : d);
@@ -1344,7 +1506,8 @@
                share: total ? Math.round((byCat[k] / total) * 100) : 0 };
     }).sort(function (a, b) { return b.amount - a.amount; });
     return { key: mk, label: MONTHS[m] + ' ' + y, shortLabel: SHORT[m],
-             total: total, count: count, daily: daily, breakdown: breakdown };
+             total: total, count: count, daily: daily, breakdown: breakdown,
+             archived: !inWindow(mk), pending: pending, failed: failed };
   }
 
   // ── Sync ─────────────────────────────────────────────────────────
@@ -1410,6 +1573,134 @@
     return o.type === 'add' ? { type: 'add', entry: o.entry } : { type: 'delete', id: o.id };
   }
 
+  /**
+   * Takes on the window the Sheet just described. Entries older than it are no
+   * longer sent, so anything the phone still holds from before is folded into
+   * `totals` rather than left to rot as a partial month.
+   */
+  function absorbWindow(data) {
+    if (data && data.totals && typeof data.totals === 'object') totals = data.totals;
+    if (data && isoDate(data.windowStart)) {
+      windowStart = data.windowStart;
+      pruneToWindow();
+    }
+  }
+
+  /* ── Reaching past the window ──────────────────────────────────────
+     The Sheet answers a `query` op with the rows it holds for a date range,
+     capped at a few hundred. `skipWindow` keeps the reply to just that answer.  */
+  function sheetQuery(q) {
+    if (!cfg.url || !cfg.secret) return Promise.reject(new Error('No Sheet connected.'));
+    if (!navigator.onLine) return Promise.reject(new Error('offline'));
+    return fetch(cfg.url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        secret: cfg.secret, passcode: vault.pass, skipWindow: true,
+        ops: [{ type: 'query', from: q.from || '', to: q.to || '',
+                text: q.text || '', category: q.category || '', limit: q.limit || 500 }]
+      })
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!data || !data.ok) throw new Error((data && data.error) || 'The Sheet refused the request.');
+        var res = data.query || { entries: [], matched: 0, total: 0, truncated: false };
+        // Tagged here so every screen that touches one of these rows knows it is
+        // not in `entries` and has to keep `totals` in step by hand.
+        (res.entries || []).forEach(function (e) { e.archived = true; e.pending = false; });
+        return res;
+      });
+  }
+
+  /** One whole archived month, for the Insights pager. Fetched once per session. */
+  function fetchArchiveMonth(mk) {
+    // Attempted once, whatever the outcome. A failure repaints, which lands back
+    // here, so retrying on `error` would spin. Coming back online clears
+    // `archMonths` through sync, and that is what gets a second attempt.
+    if (archMonths[mk]) return;
+    if (!cfg.url || !cfg.secret || !navigator.onLine) {
+      archMonths[mk] = { state: 'error', entries: [] };
+      return;
+    }
+    archMonths[mk] = { state: 'loading', entries: [] };
+    var last = new Date(Number(mk.slice(0, 4)), Number(mk.slice(5, 7)), 0);
+    sheetQuery({ from: mk + '-01', to: ymd(last), limit: 500 })
+      .then(function (res) {
+        archMonths[mk] = { state: 'ready', entries: res.entries || [] };
+        if (insightsMonth === mk) paintCharts();
+      })
+      .catch(function () {
+        archMonths[mk] = { state: 'error', entries: [] };
+        if (insightsMonth === mk) paintCharts();
+      });
+  }
+
+  /** The oldest date the filter on screen is asking about. '' means all time. */
+  function periodStart() {
+    if (filter.period === 'month') return V.monthKey + '-01';
+    if (filter.period === 'last') return V.lastMonthKey + '-01';
+    if (filter.period === '7d') return V.weekStart;
+    if (filter.period === 'range') return filter.from || '';
+    return '';
+  }
+  /**
+   * True when the filter asks for dates the phone does not hold. Worked out from
+   * the dates rather than the period's name: the Sheet decides how far back the
+   * window reaches, and on a busy ledger it can be short enough that even "Last
+   * month" falls outside it.
+   */
+  function needsArchive() {
+    if (!windowStart) return false;
+    var s = periodStart();
+    return !s || s < windowStart;
+  }
+  /** Identifies one archive result, so a repeated paint doesn't refetch it. */
+  function archiveKey() {
+    return [filter.period, filter.from || '', filter.to || '',
+            filter.text.trim().toLowerCase(), filter.category].join('|');
+  }
+  /**
+   * Asks for the part of the current filter that lies before the window. The
+   * range stops the day before `windowStart`, because everything from there on
+   * is already on the phone and would only come back as duplicates.
+   */
+  function loadArchive() {
+    var key = archiveKey();
+    // A finished attempt is never retried on its own — a failure calls paintList,
+    // which lands back here, and an automatic retry would spin. The banner offers
+    // a Retry button instead, which clears the key.
+    if (archive.key === key) return;
+    if (archTimer) clearTimeout(archTimer);
+
+    var before = ymd(new Date(new Date(windowStart + 'T12:00:00').getTime() - 864e5));
+    var to = (filter.to && filter.to < before) ? filter.to : before;
+    var from = periodStart();
+    if (from && from > to) {            // the filter sits entirely inside the window
+      archive = { key: key, state: 'idle', entries: [], matched: 0, total: 0, truncated: false };
+      return;
+    }
+
+    archive = { key: key, state: 'loading', entries: [], matched: 0, total: 0, truncated: false };
+    paintArchNote();
+    archTimer = setTimeout(function () {
+      var q = { from: from, to: to, text: filter.text.trim(),
+                category: filter.category, limit: 500 };
+      sheetQuery(q)
+        .then(function (res) {
+          if (archive.key !== key) return;          // the filter moved on while waiting
+          archive = { key: key, state: 'ready', entries: res.entries || [],
+                      matched: res.matched || 0, total: res.total || 0,
+                      truncated: !!res.truncated };
+          paintList();
+        })
+        .catch(function (err) {
+          if (archive.key !== key) return;
+          archive.state = String(err && err.message) === 'offline' ? 'offline' : 'error';
+          paintList();
+        });
+    }, 350);            // one request per pause in typing, not one per keystroke
+  }
+
   function sync(quiet) {
     if (!vault.ready) return;
     if (syncing || !cfg.url || !cfg.secret) { paintStatus(); return; }
@@ -1441,10 +1732,15 @@
         sending.forEach(function (o) { done[o.opId] = true; });
         outbox = outbox.filter(function (o) { return !done[o.opId]; });
 
+        absorbWindow(data);
         if (Object.prototype.toString.call(data.entries) === '[object Array]') {
           var server = data.entries.map(function (e) { e.pending = false; return e; });
           entries = applyOps(server, outbox);   // keeps anything queued mid-flight
         }
+        // A sync can move the window forward and can change months the archive
+        // view was showing, so nothing fetched under the old window is reused.
+        archMonths = {};
+        archive = { key: '', state: 'idle', entries: [], matched: 0, total: 0, truncated: false };
         save();
         syncing = false;
         paintAll();
@@ -1560,6 +1856,9 @@
     $('eNote').value = e.note || '';
     $('editNote').textContent = e.pending
       ? "This one hasn't reached your Sheet yet, so the queued row is rewritten in place."
+      : e.archived
+      ? 'This one is archived in your Sheet. The old row is removed from the archive ' +
+        'and a corrected one is written.'
       : 'The old row is removed from your Sheet and a corrected one is written.';
     var box = $('eCats'); box.innerHTML = '';
     CATEGORIES.forEach(function (c) {
@@ -1599,6 +1898,31 @@
     }
     var next = { amount: Math.round(n * 100) / 100, category: chosenEditCat(),
                  date: date, note: $('eNote').value.trim() };
+
+    // An archived row: the Sheet swap is the same delete-plus-add, but the local
+    // bookkeeping is the archive's rather than `entries`'. Where the corrected
+    // row lands depends on its new date — a date pulled forward into the window
+    // makes it an ordinary pending row again.
+    if (e.archived) {
+      var moved = { id: uid(), date: next.date, amount: next.amount, category: next.category,
+                    note: next.note, loggedAt: e.loggedAt || new Date().toISOString() };
+      archiveShed(e);
+      if (inWindow(next.date.slice(0, 7))) {
+        moved.pending = true;
+        entries.push(moved);
+      } else {
+        moved.archived = true;
+        archiveTake(moved);
+      }
+      queueOps([{ type: 'delete', id: e.id, label: labelOf(e) },
+                { type: 'add', entry: wireEntry(moved), label: labelOf(moved) }]);
+      editing = null;
+      closeSheets();
+      paintAll();
+      buzz(18);
+      toast('Updated to ' + rs(next.amount) + ' · ' + next.category);
+      return;
+    }
 
     var idx = -1;
     for (var i = 0; i < entries.length; i++) if (entries[i].id === e.id) { idx = i; break; }
@@ -1654,7 +1978,41 @@
       action: { label: 'Undo', fn: function () { undoRemove(e); } }
     });
   }
+  /* An archived row is on screen but not in `entries` — its month is represented
+     only by a number in `totals`. Changing one therefore has to move that number
+     by hand, or the charts would keep counting spend the Sheet no longer holds. */
+  function archiveShed(e) {
+    archive.entries = archive.entries.filter(function (x) { return x.id !== e.id; });
+    if (archive.matched) archive.matched--;
+    archive.total -= e.amount;
+    var mk = e.date.slice(0, 7);
+    if (totals[mk] !== undefined) totals[mk] = Math.max(0, totals[mk] - e.amount);
+    var m = archMonths[mk];
+    if (m && m.state === 'ready') {
+      m.entries = m.entries.filter(function (x) { return x.id !== e.id; });
+    }
+  }
+  function archiveTake(e) {
+    if (!archive.entries.some(function (x) { return x.id === e.id; })) {
+      archive.entries.push(e);
+      archive.matched++;
+      archive.total += e.amount;
+    }
+    var mk = e.date.slice(0, 7);
+    totals[mk] = (totals[mk] || 0) + e.amount;
+    var m = archMonths[mk];
+    if (m && m.state === 'ready' && !m.entries.some(function (x) { return x.id === e.id; })) {
+      m.entries.push(e);
+    }
+  }
+
   function removeEntry(e) {
+    if (e.archived) {
+      archiveShed(e);
+      queue({ type: 'delete', id: e.id, label: labelOf(e) });
+      paintAll();
+      return;
+    }
     entries = entries.filter(function (x) { return x.id !== e.id; });
 
     // If it was never sent, just drop the queued write instead of queuing a delete.
@@ -1673,11 +2031,14 @@
       e.pending = true;
       queue({ type: 'add', entry: wireEntry(e), label: labelOf(e) });
     }
-    var known = false;
-    for (var i = 0; i < entries.length; i++) if (entries[i].id === e.id) { known = true; break; }
-    if (!known) entries.push(e);
-    save();
-    paintAll();
+    if (e.archived) { archiveTake(e); save(); paintAll(); }
+    else {
+      var known = false;
+      for (var i = 0; i < entries.length; i++) if (entries[i].id === e.id) { known = true; break; }
+      if (!known) entries.push(e);
+      save();
+      paintAll();
+    }
     toast('Restored ' + rs(e.amount) + ' · ' + e.category);
   }
 
@@ -1828,9 +2189,69 @@
     });
   }
   function filtered() {
-    return inPeriodAndText().filter(function (e) {
+    var rows = inPeriodAndText().filter(function (e) {
       return filter.category === 'all' || e.category === filter.category;
     });
+    // The Sheet already applied the same period, text and category to the
+    // archived rows, and its range stops before the window, so the two halves
+    // concatenate without overlapping. Newest first, as everywhere else.
+    if (archive.state === 'ready' && archive.entries.length) {
+      rows = rows.concat(archive.entries);
+      rows.sort(function (a, b) {
+        if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+        return (a.loggedAt || '') < (b.loggedAt || '') ? 1 : -1;
+      });
+    }
+    return rows;
+  }
+
+  /**
+   * Says plainly what is and isn't in the list. Without this a filter reaching
+   * past the window would show only the recent slice and look like the whole
+   * answer, which is a worse failure than showing nothing.
+   */
+  function paintArchNote() {
+    var box = $('archNote'), txt = $('archText'), act = $('archAct');
+    if (!needsArchive()) { box.classList.add('hidden'); return; }
+    box.classList.remove('hidden');
+    box.classList.remove('warn');
+    act.classList.add('hidden');
+    act.onclick = null;
+
+    var since = prettyDate(windowStart);
+    if (archive.state === 'loading') {
+      txt.textContent = 'Looking through your Sheet for anything before ' + since + '…';
+      return;
+    }
+    if (archive.state === 'offline') {
+      box.classList.add('warn');
+      txt.textContent = 'Showing ' + since + ' onwards. Older expenses live in your Sheet ' +
+                        'and need a connection.';
+      return;
+    }
+    if (archive.state === 'error') {
+      box.classList.add('warn');
+      txt.textContent = 'Showing ' + since + ' onwards — could not reach your Sheet for ' +
+                        'anything older.';
+      act.textContent = 'Retry';
+      act.classList.remove('hidden');
+      act.onclick = function () { archive.key = ''; paintList(); };
+      return;
+    }
+    if (archive.state === 'ready') {
+      if (archive.truncated) {
+        box.classList.add('warn');
+        txt.textContent = 'Older expenses are cut off at the first ' + archive.entries.length +
+                          ' of ' + archive.matched + '. Narrow the dates to see the rest.';
+        return;
+      }
+      txt.textContent = archive.entries.length
+        ? 'Includes ' + archive.entries.length + ' older ' +
+          (archive.entries.length === 1 ? 'expense' : 'expenses') + ' from your Sheet.'
+        : 'Nothing older than ' + since + ' matches.';
+      return;
+    }
+    txt.textContent = 'Showing ' + since + ' onwards.';
   }
   function isDefaultFilter() {
     return filter.period === 'month' && filter.category === 'all' && !filter.text.trim();
@@ -1865,10 +2286,13 @@
             filter.from = V.monthKey + '-01'; filter.to = V.today;
           }
           // A category with nothing in the new period would strand the list on an empty
-          // result with no way to tell why, so it drops back to All.
-          if (filter.category !== 'all' && !inPeriodAndText().some(function (e) {
-            return e.category === filter.category;
-          })) filter.category = 'all';
+          // result with no way to tell why, so it drops back to All. Not when the
+          // period reaches past the window, though — the rows that would justify
+          // keeping it have not arrived yet.
+          if (filter.category !== 'all' && !needsArchive() &&
+              !inPeriodAndText().some(function (e) {
+                return e.category === filter.category;
+              })) filter.category = 'all';
           buzz(8); save(); paintList();
         };
         seg.appendChild(b);
@@ -1883,6 +2307,11 @@
     // nothing in the selected period would otherwise offer a guaranteed empty result.
     var used = {};
     inPeriodAndText().forEach(function (e) { used[e.category] = true; });
+    // Categories that only occur in archived rows still deserve a chip, or an
+    // "All time" view would offer no way to filter down to them.
+    if (archive.state === 'ready') {
+      archive.entries.forEach(function (e) { used[e.category] = true; });
+    }
     var names = CATEGORIES.map(function (c) { return c.name; })
       .filter(function (n) { return used[n] || n === filter.category; });
     var chips = $('catChips'); chips.innerHTML = '';
@@ -1907,14 +2336,24 @@
   }
   function paintList() {
     var box = $('list'); box.innerHTML = '';
-    if (!V.all.length) {
+    // Kick off the archive lookup before rendering, so the banner can say it is
+    // still coming rather than letting a short list stand as the whole answer.
+    if (needsArchive()) loadArchive();
+    else if (archive.key) archive = { key: '', state: 'idle', entries: [],
+                                      matched: 0, total: 0, truncated: false };
+
+    if (!V.all.length && archive.state !== 'ready') {
       paintFilters([]);
       $('fCount').textContent = '';
-      box.innerHTML = '<div class="empty"><b>No expenses yet</b>Tap the Add tab to record your first one.</div>';
+      paintArchNote();
+      box.innerHTML = archive.state === 'loading'
+        ? '<div class="empty"><b>Looking in your Sheet…</b>Fetching older expenses.</div>'
+        : '<div class="empty"><b>No expenses yet</b>Tap the Add tab to record your first one.</div>';
       return;
     }
     var rows = filtered();
     paintFilters(rows);
+    paintArchNote();
     if (!rows.length) {
       box.innerHTML = '<div class="empty"><b>No matching expenses</b>' +
         'Try a wider period or clear the filters.</div>';
@@ -1947,6 +2386,10 @@
           var p = document.createElement('span');
           p.className = 'pill'; p.textContent = 'NOT SYNCED';
           t1.appendChild(p);
+        } else if (e.archived) {
+          var a = document.createElement('span');
+          a.className = 'pill arch'; a.textContent = 'ARCHIVED';
+          t1.appendChild(a);
         }
         var clock = clockOf(e.loggedAt);
         row.querySelector('.t2').textContent = e.note ? (clock ? clock + ' · ' : '') + e.note : clock;
@@ -1997,9 +2440,27 @@
     $('mPrev').disabled = insightsMonth <= V.earliestMonth;
 
     var box = $('charts'); box.innerHTML = '';
-    if (!entries.length) {
-      box.innerHTML = '<div class="empty"><b>Nothing to chart yet</b>' +
-        'Save a few expenses and your spending patterns will show up here.</div>';
+    if (!entries.length && !M.count) {
+      box.innerHTML = M.pending
+        ? '<div class="empty"><b>Fetching ' + M.label + '…</b>' +
+          'This month is in your Sheet rather than on this phone.</div>'
+        : M.failed
+        ? '<div class="empty"><b>' + M.label + ' is in your Sheet</b>' +
+          'It needs a connection to show — ' + rs(M.total) + ' was spent that month.</div>'
+        : '<div class="empty"><b>Nothing to chart yet</b>' +
+          'Save a few expenses and your spending patterns will show up here.</div>';
+      return;
+    }
+    // An archived month whose rows have not arrived: show the one number that is
+    // known instead of a day-by-day chart that would read as a month of zeros.
+    if (M.archived && !M.count) {
+      var cw = document.createElement('div'); cw.className = 'card';
+      cw.innerHTML = '<h3>' + M.label + '</h3><p class="sub">' +
+        (M.pending ? 'Fetching this month from your Sheet…'
+         : M.failed ? 'This month is archived in your Sheet and needs a connection.'
+         : 'Archived in your Sheet.') +
+        '</p><div class="bigtotal tnum">' + rs(M.total) + '</div>';
+      box.appendChild(cw);
       return;
     }
     var maxDay = Math.max.apply(null, M.daily.map(function (d) { return d.amount; })) || 1;

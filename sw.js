@@ -1,6 +1,6 @@
 /* Ledger service worker — makes the app open and run with no connection. */
 
-const VERSION = 'ledger-v3';
+const VERSION = 'ledger-v4';
 const SHELL = [
   './',
   './index.html',
