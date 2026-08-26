@@ -1,7 +1,7 @@
 {
   "id": "ledger-expense-tracker",
-  "name": "Ledger — Expense Tracker",
-  "short_name": "Ledger",
+  "name": "Daybook — Expense Tracker",
+  "short_name": "Daybook",
   "description": "Track daily spending in rupees. Passcode locked, works offline, syncs to your Google Sheet.",
   "lang": "en-IN",
   "dir": "ltr",

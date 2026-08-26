@@ -1,12 +1,13 @@
-/* Ledger service worker — makes the app open and run with no connection. */
+/* Daybook service worker — makes the app open and run with no connection. */
 
-const VERSION = 'ledger-v4';
+const VERSION = 'ledger-v5';
 const SHELL = [
   './',
   './index.html',
   './manifest.webmanifest',
   './icon-192.png',
-  './icon-512.png'
+  './icon-512.png',
+  './icon-maskable-512.png'
 ];
 
 self.addEventListener('install', function (e) {
@@ -52,7 +53,9 @@ self.addEventListener('fetch', function (e) {
         return cache.match(req).then(function (hit) {
           const net = fetch(req)
             .then(function (res) { return putIn(cache, req, res); })
-            .catch(function () { return hit; });
+            // Nothing cached and no network: answer with a network error rather than
+            // resolving to undefined, which respondWith rejects on.
+            .catch(function () { return hit || Response.error(); });
           return hit || net;
         });
       })
@@ -75,7 +78,7 @@ self.addEventListener('fetch', function (e) {
           .catch(function () {
             return cache.match(req).then(function (hit) {
               return hit || cache.match('./index.html');
-            });
+            }).then(function (hit) { return hit || Response.error(); });
           });
       })
     );
@@ -86,7 +89,9 @@ self.addEventListener('fetch', function (e) {
   e.respondWith(
     caches.open(VERSION).then(function (cache) {
       return cache.match(req).then(function (hit) {
-        return hit || fetch(req).then(function (res) { return putIn(cache, req, res); });
+        return hit || fetch(req)
+          .then(function (res) { return putIn(cache, req, res); })
+          .catch(function () { return Response.error(); });
       });
     })
   );
